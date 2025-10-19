@@ -231,12 +231,14 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 20,
     paddingBottom: 40,
+    paddingTop: 30,
   },
   title: {
     fontSize: 28,
     fontWeight: 'bold',
     color: '#ECEDEE',
     marginBottom: 8,
+    lineHeight: 28,
   },
   description: {
     fontSize: 16,
@@ -311,6 +313,7 @@ const styles = StyleSheet.create({
     fontSize: 48,
     fontWeight: 'bold',
     color: '#ECEDEE',
+    lineHeight: 48,
   },
   handsCard: {
     backgroundColor: '#1A1A24',

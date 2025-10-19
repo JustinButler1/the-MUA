@@ -1,9 +1,10 @@
+import { GameCard } from '@/components/game-card';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { router } from 'expo-router';
-import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 
 export default function GamesScreen() {
   const colorScheme = useColorScheme();
@@ -24,26 +25,19 @@ export default function GamesScreen() {
         
         {/* Game Cards */}
         <View style={styles.gameCardsContainer}>
-          {/* Spades Card */}
-          <TouchableOpacity 
-            style={[styles.gameCard, { backgroundColor: '#1A1A24' }]}
+          <GameCard
+            title="Spades"
+            description="LIVE BIDS, LOGS, AND STATISTICS"
+            badgeType="live"
             onPress={() => router.push('/spades' as any)}
-          >
-            <View style={[styles.liveBadge, { backgroundColor: '#EF4444' }]}>
-              <ThemedText style={styles.badgeText}>LIVE</ThemedText>
-            </View>
-            <ThemedText style={styles.gameTitle}>Spades</ThemedText>
-            <ThemedText style={styles.gameDescription}>LIVE BIDS, LOGS, AND STATISTICS</ThemedText>
-          </TouchableOpacity>
+          />
           
-          {/* Chess Card */}
-          <TouchableOpacity style={[styles.gameCard, { backgroundColor: '#1A1A24' }]}>
-            <View style={[styles.soonBadge, { backgroundColor: '#9BA1A6' }]}>
-              <ThemedText style={[styles.badgeText, { color: '#1A1A24' }]}>SOON</ThemedText>
-            </View>
-            <ThemedText style={styles.gameTitle}>Chess</ThemedText>
-            <ThemedText style={styles.gameDescription}>LIVE SCORE TRACKING IN DEVELOPMENT</ThemedText>
-          </TouchableOpacity>
+          <GameCard
+            title="Chess"
+            description="LIVE SCORE TRACKING IN DEVELOPMENT"
+            badgeType="soon"
+            onPress={() => {}}
+          />
         </View>
       </ScrollView>
     </ThemedView>
@@ -58,6 +52,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 60,
     paddingBottom: 20,
+    flex: 1,
   },
   arenaBadge: {
     backgroundColor: '#1A1A24',
@@ -78,6 +73,7 @@ const styles = StyleSheet.create({
     color: '#ECEDEE',
     textAlign: 'center',
     marginBottom: 8,
+    lineHeight: 32,
   },
   subtitle: {
     fontSize: 16,
@@ -87,43 +83,5 @@ const styles = StyleSheet.create({
   },
   gameCardsContainer: {
     gap: 20,
-  },
-  gameCard: {
-    padding: 24,
-    borderRadius: 16,
-    position: 'relative',
-  },
-  liveBadge: {
-    position: 'absolute',
-    top: 16,
-    left: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  soonBadge: {
-    position: 'absolute',
-    top: 16,
-    left: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  badgeText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#ECEDEE',
-  },
-  gameTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#ECEDEE',
-    marginTop: 20,
-    marginBottom: 8,
-  },
-  gameDescription: {
-    fontSize: 14,
-    color: '#9BA1A6',
-    lineHeight: 20,
   },
 });

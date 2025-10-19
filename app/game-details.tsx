@@ -162,6 +162,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 20,
     paddingBottom: 40,
+    paddingTop: 30,
   },
   gameSummaryCard: {
     backgroundColor: '#1A1A24',

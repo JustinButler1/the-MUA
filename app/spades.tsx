@@ -139,26 +139,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 60,
-    paddingBottom: 20,
-  },
-  backButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#1A1A24',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  backButtonText: {
-    color: '#ECEDEE',
-    fontSize: 16,
-    marginLeft: 8,
-  },
   headerTitle: {
     color: '#ECEDEE',
     fontSize: 18,
@@ -168,6 +148,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 20,
     paddingBottom: 100,
+    paddingTop: 30,
   },
   spadesBadge: {
     backgroundColor: '#1A1A24',
@@ -187,6 +168,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#ECEDEE',
     marginBottom: 8,
+    lineHeight: 32,
   },
   subtitle: {
     fontSize: 16,
@@ -302,7 +284,7 @@ const styles = StyleSheet.create({
   },
   addGameButton: {
     position: 'absolute',
-    bottom: 100,
+    bottom: 50,
     left: 20,
     right: 20,
     backgroundColor: '#EF4444',

@@ -22,8 +22,6 @@ export default function CreateTeamScreen() {
       <StatusBar barStyle="light-content" backgroundColor="#0A0A0F" />
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Create Team Title */}
-        <ThemedText style={styles.title}>Create Team</ThemedText>
 
         {/* Team Name Section */}
         <View style={styles.section}>
@@ -133,43 +131,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 60,
-    paddingBottom: 20,
-  },
-  backButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#ECEDEE',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  backButtonText: {
-    color: '#0A0A0F',
-    fontSize: 14,
-    fontWeight: '600',
-    marginLeft: 8,
-  },
-  headerTitle: {
-    color: '#ECEDEE',
-    fontSize: 16,
-    fontWeight: '500',
-    marginLeft: 20,
-  },
   scrollContent: {
     paddingHorizontal: 20,
     paddingBottom: 40,
-  },
-  title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#ECEDEE',
-    textAlign: 'center',
-    marginBottom: 40,
+    paddingTop: 30,
   },
   section: {
     marginBottom: 32,
