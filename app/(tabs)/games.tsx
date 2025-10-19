@@ -2,6 +2,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { router } from 'expo-router';
 import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 
 export default function GamesScreen() {
@@ -24,7 +25,10 @@ export default function GamesScreen() {
         {/* Game Cards */}
         <View style={styles.gameCardsContainer}>
           {/* Spades Card */}
-          <TouchableOpacity style={[styles.gameCard, { backgroundColor: '#1A1A24' }]}>
+          <TouchableOpacity 
+            style={[styles.gameCard, { backgroundColor: '#1A1A24' }]}
+            onPress={() => router.push('/spades' as any)}
+          >
             <View style={[styles.liveBadge, { backgroundColor: '#EF4444' }]}>
               <ThemedText style={styles.badgeText}>LIVE</ThemedText>
             </View>
