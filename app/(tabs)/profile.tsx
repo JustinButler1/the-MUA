@@ -1,11 +1,17 @@
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Colors } from '@/constants/theme';
+import { useAuth } from '@/contexts/AuthContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 
 export default function ProfileScreen() {
   const colorScheme = useColorScheme();
+  const { signOut } = useAuth();
+
+  const handleSignOut = () => {
+    signOut();
+  };
   
   return (
     <ThemedView style={[styles.container, { backgroundColor: Colors[colorScheme ?? 'dark'].background }]}>
@@ -33,6 +39,13 @@ export default function ProfileScreen() {
           
           <TouchableOpacity style={[styles.qrButton, { backgroundColor: '#EF4444' }]}>
             <ThemedText style={styles.buttonText}>Show Profile QR</ThemedText>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={[styles.signOutButton, { backgroundColor: '#2A2A3A', borderColor: '#EF4444' }]}
+            onPress={handleSignOut}
+          >
+            <ThemedText style={[styles.buttonText, { color: '#EF4444' }]}>Sign Out</ThemedText>
           </TouchableOpacity>
         </View>
         
@@ -134,6 +147,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
+    marginBottom: 8,
+    width: '100%',
+    alignItems: 'center',
+  },
+  signOutButton: {
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+    borderWidth: 1,
     width: '100%',
     alignItems: 'center',
   },
