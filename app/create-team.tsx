@@ -1,20 +1,123 @@
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Colors } from '@/constants/theme';
+import { useAuth } from '@/contexts/AuthContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { supabase } from '@/lib/supabase';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { ScrollView, StatusBar, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, ScrollView, StatusBar, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 
 export default function CreateTeamScreen() {
   const colorScheme = useColorScheme();
-  const [teamName, setTeamName] = useState('Late Night Renegades');
-  const [partnerType, setPartnerType] = useState<'registered' | 'guest'>('registered');
-  const [guestName, setGuestName] = useState('Alex Guest');
+  const { user } = useAuth();
+  const [teamName, setTeamName] = useState('');
+  const [partnerType, setPartnerType] = useState<'registered' | 'guest'>('guest');
+  const [guestName, setGuestName] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
-  const player1Info = {
-    name: 'Test',
-    id: 'cfe7e067-51a8-4f36-9f2e-9baa7ff010f4',
+  const handleSaveTeam = async () => {
+    if (!user) {
+      Alert.alert('Error', 'You must be logged in to create a team');
+      return;
+    }
+
+    if (!teamName.trim()) {
+      Alert.alert('Error', 'Please enter a team name');
+      return;
+    }
+
+    if (partnerType === 'guest' && !guestName.trim()) {
+      Alert.alert('Error', 'Please enter a guest name');
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      // Create the team
+      const { data: teamData, error: teamError } = await supabase
+        .from('teams')
+        .insert({
+          name: teamName.trim(),
+          created_by: user.id
+        })
+        .select()
+        .single();
+
+      if (teamError) {
+        console.error('Error creating team:', teamError);
+        Alert.alert('Error', 'Failed to create team');
+        return;
+      }
+
+      const teamId = teamData.id;
+
+      // Add current user as team member (slot 1)
+      const { error: userMemberError } = await supabase
+        .from('team_members')
+        .insert({
+          team_id: teamId,
+          slot: 1,
+          user_id: user.id
+        });
+
+      if (userMemberError) {
+        console.error('Error adding user to team:', userMemberError);
+        Alert.alert('Error', 'Failed to add you to the team');
+        return;
+      }
+
+      // Handle partner based on type
+      if (partnerType === 'guest') {
+        // Create guest
+        const { data: guestData, error: guestError } = await supabase
+          .from('team_guests')
+          .insert({
+            team_id: teamId,
+            display_name: guestName.trim()
+          })
+          .select()
+          .single();
+
+        if (guestError) {
+          console.error('Error creating guest:', guestError);
+          Alert.alert('Error', 'Failed to create guest');
+          return;
+        }
+
+        // Add guest as team member (slot 2)
+        const { error: guestMemberError } = await supabase
+          .from('team_members')
+          .insert({
+            team_id: teamId,
+            slot: 2,
+            guest_id: guestData.id
+          });
+
+        if (guestMemberError) {
+          console.error('Error adding guest to team:', guestMemberError);
+          Alert.alert('Error', 'Failed to add guest to the team');
+          return;
+        }
+      } else {
+        // For registered partner, we'll need to implement QR scanning later
+        Alert.alert('Info', 'Registered partner feature coming soon! For now, please use guest partner.');
+        return;
+      }
+
+      Alert.alert('Success', 'Team created successfully!', [
+        {
+          text: 'OK',
+          onPress: () => router.back()
+        }
+      ]);
+    } catch (error) {
+      console.error('Error creating team:', error);
+      Alert.alert('Error', 'Failed to create team');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -37,10 +140,10 @@ export default function CreateTeamScreen() {
 
         {/* Player 1 Section */}
         <View style={styles.section}>
-          <ThemedText style={styles.sectionLabel}>Player 1</ThemedText>
+          <ThemedText style={styles.sectionLabel}>Player 1 (You)</ThemedText>
           <View style={styles.playerInfoCard}>
-            <ThemedText style={styles.playerName}>{player1Info.name}</ThemedText>
-            <ThemedText style={styles.playerId}>{player1Info.id}</ThemedText>
+            <ThemedText style={styles.playerName}>{user?.user_metadata?.display_name || 'You'}</ThemedText>
+            <ThemedText style={styles.playerId}>{user?.id || 'Loading...'}</ThemedText>
           </View>
         </View>
 
@@ -118,8 +221,16 @@ export default function CreateTeamScreen() {
             <ThemedText style={styles.cancelButtonText}>Cancel</ThemedText>
           </TouchableOpacity>
           
-          <TouchableOpacity style={styles.saveButton}>
-            <ThemedText style={styles.saveButtonText}>Save Team</ThemedText>
+          <TouchableOpacity 
+            style={[styles.saveButton, isLoading && styles.saveButtonDisabled]}
+            onPress={handleSaveTeam}
+            disabled={isLoading}
+          >
+            {isLoading ? (
+              <ActivityIndicator size="small" color="#ECEDEE" />
+            ) : (
+              <ThemedText style={styles.saveButtonText}>Save Team</ThemedText>
+            )}
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -257,5 +368,8 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     textAlign: 'center',
+  },
+  saveButtonDisabled: {
+    opacity: 0.6,
   },
 });

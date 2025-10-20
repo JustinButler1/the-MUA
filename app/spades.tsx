@@ -1,18 +1,19 @@
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Colors } from '@/constants/theme';
+import { useAuth } from '@/contexts/AuthContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { router } from 'expo-router';
-import { ScrollView, StatusBar, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { supabase } from '@/lib/supabase';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, ScrollView, StatusBar, StyleSheet, TouchableOpacity, View } from 'react-native';
 
-// Mock data
-const mockTeams = [
-  {
-    id: '1',
-    name: 'yes team test team',
-    members: 'Test · guestalex',
-  },
-];
+// Types for team data
+interface Team {
+  id: string;
+  name: string;
+  members: string;
+}
 
 const mockGames = [
   {
@@ -46,6 +47,73 @@ const mockGames = [
 
 export default function SpadesScreen() {
   const colorScheme = useColorScheme();
+  const { user } = useAuth();
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [isLoadingTeams, setIsLoadingTeams] = useState(true);
+
+  const fetchTeams = useCallback(async () => {
+    if (!user) {
+      setIsLoadingTeams(false);
+      return;
+    }
+
+    try {
+      // Fetch teams where user is a member
+      const { data: teamMembers, error: teamError } = await supabase
+        .from('team_members')
+        .select(`
+          team_id,
+          teams!inner(id, name),
+          profiles(display_name),
+          team_guests(display_name)
+        `)
+        .eq('user_id', user.id);
+
+      if (teamError) {
+        console.error('Error fetching teams:', teamError);
+        Alert.alert('Error', 'Failed to load teams');
+        return;
+      }
+
+      // Process team data
+      const processedTeams: Team[] = teamMembers?.map((member: any) => {
+        const team = member.teams;
+        const members = [];
+        
+        // Get all members for this team
+        if (member.profiles?.display_name) {
+          members.push(member.profiles.display_name);
+        }
+        if (member.team_guests?.display_name) {
+          members.push(member.team_guests.display_name);
+        }
+        
+        return {
+          id: team.id,
+          name: team.name,
+          members: members.join(' · ')
+        };
+      }) || [];
+
+      setTeams(processedTeams);
+    } catch (error) {
+      console.error('Error fetching teams:', error);
+      Alert.alert('Error', 'Failed to load teams');
+    } finally {
+      setIsLoadingTeams(false);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    fetchTeams();
+  }, [fetchTeams]);
+
+  // Refresh teams when screen comes into focus (e.g., returning from create-team)
+  useFocusEffect(
+    useCallback(() => {
+      fetchTeams();
+    }, [fetchTeams])
+  );
 
   return (
     <ThemedView style={[styles.container, { backgroundColor: Colors[colorScheme ?? 'dark'].background }]}>
@@ -76,16 +144,25 @@ export default function SpadesScreen() {
         {/* Your Teams Section */}
         <View style={styles.section}>
           <ThemedText style={styles.sectionTitle}>YOUR TEAMS</ThemedText>
-          {mockTeams.map((team) => (
-            <TouchableOpacity 
-              key={team.id} 
-              style={styles.teamCard}
-              onPress={() => router.push('/team-manager' as any)}
-            >
-              <ThemedText style={styles.teamName}>{team.name}</ThemedText>
-              <ThemedText style={styles.teamMembers}>{team.members}</ThemedText>
-            </TouchableOpacity>
-          ))}
+          {isLoadingTeams ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="small" color="#EF4444" />
+              <ThemedText style={styles.loadingText}>Loading teams...</ThemedText>
+            </View>
+          ) : teams.length === 0 ? (
+            <ThemedText style={styles.emptyText}>No teams yet. Create your first team!</ThemedText>
+          ) : (
+            teams.map((team) => (
+              <TouchableOpacity 
+                key={team.id} 
+                style={styles.teamCard}
+                onPress={() => router.push('/team-manager' as any)}
+              >
+                <ThemedText style={styles.teamName}>{team.name}</ThemedText>
+                <ThemedText style={styles.teamMembers}>{team.members}</ThemedText>
+              </TouchableOpacity>
+            ))
+          )}
         </View>
 
         {/* Game History */}
@@ -296,5 +373,23 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     textAlign: 'center',
+  },
+  loadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 20,
+  },
+  loadingText: {
+    color: '#ECEDEE',
+    fontSize: 14,
+    marginLeft: 8,
+  },
+  emptyText: {
+    color: '#9BA1A6',
+    fontSize: 14,
+    textAlign: 'center',
+    fontStyle: 'italic',
+    paddingVertical: 20,
   },
 });
