@@ -19,17 +19,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
 
   useEffect(() => {
+    // For now, let's force the app to show sign-in page
+    // This will help us debug the issue
+    console.log('AuthContext: Starting auth check');
+    
     // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(({ data: { session }, error }) => {
+      console.log('Initial session check:', { session: !!session, error });
       setUser(session?.user ?? null);
       setIsSignedIn(!!session);
+      setIsLoading(false);
+    }).catch((error) => {
+      console.log('Error getting session:', error);
+      setUser(null);
+      setIsSignedIn(false);
       setIsLoading(false);
     });
 
     // Listen for auth changes
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log('Auth state change:', { event, session: !!session });
       setUser(session?.user ?? null);
       setIsSignedIn(!!session);
       setIsLoading(false);
