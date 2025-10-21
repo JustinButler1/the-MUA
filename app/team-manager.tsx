@@ -6,7 +6,8 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, ScrollView, StatusBar, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Modal, ScrollView, StatusBar, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
+import QRCode from 'react-native-qrcode-svg';
 
 // Types for team data
 interface TeamMember {
@@ -28,6 +29,7 @@ export default function TeamManagerScreen() {
   const [team, setTeam] = useState<Team | null>(null);
   const [teamName, setTeamName] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [showQRModal, setShowQRModal] = useState(false);
 
   useEffect(() => {
     const fetchTeamData = async () => {
@@ -224,7 +226,7 @@ export default function TeamManagerScreen() {
 
         {/* Action Buttons */}
         <View style={styles.actionButtons}>
-          <TouchableOpacity style={styles.primaryButton}>
+          <TouchableOpacity style={styles.primaryButton} onPress={() => setShowQRModal(true)}>
             <ThemedText style={styles.buttonText}>Show Team QR</ThemedText>
           </TouchableOpacity>
           
@@ -237,6 +239,51 @@ export default function TeamManagerScreen() {
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      {/* QR Code Modal */}
+      <Modal
+        visible={showQRModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowQRModal(false)}
+      >
+        <TouchableOpacity 
+          style={styles.modalOverlay} 
+          activeOpacity={1}
+          onPress={() => setShowQRModal(false)}
+        >
+          <View style={styles.qrModalContent}>
+            <TouchableOpacity 
+              style={styles.qrModalInner}
+              activeOpacity={1}
+              onPress={(e) => e.stopPropagation()}
+            >
+              <ThemedText style={styles.qrModalTitle}>Team QR Code</ThemedText>
+              <ThemedText style={styles.qrModalSubtitle}>{team.name}</ThemedText>
+              
+              <View style={styles.qrCodeContainer}>
+                <QRCode
+                  value={teamId || ''}
+                  size={240}
+                  backgroundColor="white"
+                  color="black"
+                />
+              </View>
+              
+              <ThemedText style={styles.qrModalDescription}>
+                Share this QR code with others to let them join your team
+              </ThemedText>
+              
+              <TouchableOpacity 
+                style={styles.closeButton}
+                onPress={() => setShowQRModal(false)}
+              >
+                <ThemedText style={styles.closeButtonText}>Close</ThemedText>
+              </TouchableOpacity>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </ThemedView>
   );
 }
@@ -372,6 +419,61 @@ const styles = StyleSheet.create({
   errorText: {
     color: '#EF4444',
     fontSize: 16,
+    textAlign: 'center',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  qrModalContent: {
+    width: '85%',
+    maxWidth: 400,
+  },
+  qrModalInner: {
+    backgroundColor: '#1A1A24',
+    borderRadius: 20,
+    padding: 30,
+    alignItems: 'center',
+  },
+  qrModalTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#ECEDEE',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  qrModalSubtitle: {
+    fontSize: 16,
+    color: '#9BA1A6',
+    marginBottom: 24,
+    textAlign: 'center',
+  },
+  qrCodeContainer: {
+    backgroundColor: 'white',
+    padding: 20,
+    borderRadius: 16,
+    marginBottom: 24,
+  },
+  qrModalDescription: {
+    fontSize: 14,
+    color: '#9BA1A6',
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 20,
+  },
+  closeButton: {
+    backgroundColor: '#EF4444',
+    paddingVertical: 14,
+    paddingHorizontal: 32,
+    borderRadius: 12,
+    width: '100%',
+  },
+  closeButtonText: {
+    color: '#ECEDEE',
+    fontSize: 16,
+    fontWeight: '600',
     textAlign: 'center',
   },
 });
