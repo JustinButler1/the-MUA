@@ -4,9 +4,15 @@ import { Colors } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Alert, ScrollView, StatusBar, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Modal, ScrollView, StatusBar, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
+
+interface ScannedPartner {
+  userId: string;
+  displayName: string;
+}
 
 export default function CreateTeamScreen() {
   const colorScheme = useColorScheme();
@@ -15,6 +21,59 @@ export default function CreateTeamScreen() {
   const [partnerType, setPartnerType] = useState<'registered' | 'guest'>('guest');
   const [guestName, setGuestName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [showScanner, setShowScanner] = useState(false);
+  const [scannedPartner, setScannedPartner] = useState<ScannedPartner | null>(null);
+  const [permission, requestPermission] = useCameraPermissions();
+
+  const handleScanQR = async () => {
+    if (!permission || !permission.granted) {
+      const { granted } = await requestPermission();
+      if (!granted) {
+        Alert.alert('Permission Required', 'Camera permission is required to scan QR codes');
+        return;
+      }
+    }
+    
+    setShowScanner(true);
+  };
+
+  const handleQRScanned = async (data: string) => {
+    try {
+      const qrData = JSON.parse(data);
+      
+      // Check if it's a profile QR code
+      if (qrData.type !== 'profile') {
+        Alert.alert('Invalid QR Code', 'Please scan a profile QR code');
+        return;
+      }
+
+      const { userId, displayName } = qrData;
+
+      // Verify the user exists in the database
+      const { data: profileData, error } = await supabase
+        .from('profiles')
+        .select('user_id, display_name')
+        .eq('user_id', userId)
+        .single();
+
+      if (error || !profileData) {
+        Alert.alert('Error', 'Could not find user profile');
+        return;
+      }
+
+      // Set the scanned partner
+      setScannedPartner({
+        userId: profileData.user_id,
+        displayName: profileData.display_name || displayName
+      });
+
+      setShowScanner(false);
+      Alert.alert('Success', `Added ${profileData.display_name || displayName} as your partner!`);
+    } catch (error) {
+      console.error('Error processing QR code:', error);
+      Alert.alert('Error', 'Invalid QR code format');
+    }
+  };
 
   const handleSaveTeam = async () => {
     if (!user) {
@@ -29,6 +88,11 @@ export default function CreateTeamScreen() {
 
     if (partnerType === 'guest' && !guestName.trim()) {
       Alert.alert('Error', 'Please enter a guest name');
+      return;
+    }
+
+    if (partnerType === 'registered' && !scannedPartner) {
+      Alert.alert('Error', 'Please scan a partner\'s QR code');
       return;
     }
 
@@ -101,9 +165,20 @@ export default function CreateTeamScreen() {
           return;
         }
       } else {
-        // For registered partner, we'll need to implement QR scanning later
-        Alert.alert('Info', 'Registered partner feature coming soon! For now, please use guest partner.');
-        return;
+        // Add registered partner as team member (slot 2)
+        const { error: partnerMemberError } = await supabase
+          .from('team_members')
+          .insert({
+            team_id: teamId,
+            slot: 2,
+            user_id: scannedPartner!.userId
+          });
+
+        if (partnerMemberError) {
+          console.error('Error adding partner to team:', partnerMemberError);
+          Alert.alert('Error', 'Failed to add partner to the team');
+          return;
+        }
       }
 
       Alert.alert('Success', 'Team created successfully!', [
@@ -155,7 +230,10 @@ export default function CreateTeamScreen() {
                 styles.partnerTypeButton,
                 partnerType === 'registered' && styles.partnerTypeButtonSelected
               ]}
-              onPress={() => setPartnerType('registered')}
+              onPress={() => {
+                setPartnerType('registered');
+                setGuestName('');
+              }}
             >
               <ThemedText style={[
                 styles.partnerTypeButtonText,
@@ -170,7 +248,10 @@ export default function CreateTeamScreen() {
                 styles.partnerTypeButton,
                 partnerType === 'guest' && styles.partnerTypeButtonSelected
               ]}
-              onPress={() => setPartnerType('guest')}
+              onPress={() => {
+                setPartnerType('guest');
+                setScannedPartner(null);
+              }}
             >
               <ThemedText style={[
                 styles.partnerTypeButtonText,
@@ -188,12 +269,30 @@ export default function CreateTeamScreen() {
           
           {partnerType === 'registered' ? (
             <View>
-              <ThemedText style={styles.teammateDescription}>
-                Scan a profile QR code to add a registered teammate.
-              </ThemedText>
-              <TouchableOpacity style={styles.scanQRButton}>
-                <ThemedText style={styles.scanQRButtonText}>Scan Profile QR</ThemedText>
-              </TouchableOpacity>
+              {scannedPartner ? (
+                <View style={styles.playerInfoCard}>
+                  <ThemedText style={styles.playerName}>{scannedPartner.displayName}</ThemedText>
+                  <ThemedText style={styles.playerId}>{scannedPartner.userId}</ThemedText>
+                  <TouchableOpacity 
+                    style={styles.changeScanButton}
+                    onPress={handleScanQR}
+                  >
+                    <ThemedText style={styles.changeScanButtonText}>Scan Different Partner</ThemedText>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <View>
+                  <ThemedText style={styles.teammateDescription}>
+                    Scan a profile QR code to add a registered teammate.
+                  </ThemedText>
+                  <TouchableOpacity 
+                    style={styles.scanQRButton}
+                    onPress={handleScanQR}
+                  >
+                    <ThemedText style={styles.scanQRButtonText}>Scan Profile QR</ThemedText>
+                  </TouchableOpacity>
+                </View>
+              )}
             </View>
           ) : (
             <View>
@@ -234,6 +333,45 @@ export default function CreateTeamScreen() {
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      {/* QR Scanner Modal */}
+      <Modal
+        visible={showScanner}
+        animationType="slide"
+        onRequestClose={() => setShowScanner(false)}
+      >
+        <View style={styles.scannerContainer}>
+          <View style={styles.scannerHeader}>
+            <ThemedText style={styles.scannerTitle}>Scan Profile QR Code</ThemedText>
+            <TouchableOpacity
+              style={styles.closeScannerButton}
+              onPress={() => setShowScanner(false)}
+            >
+              <ThemedText style={styles.closeScannerText}>✕</ThemedText>
+            </TouchableOpacity>
+          </View>
+          
+          <CameraView
+            style={styles.camera}
+            facing="back"
+            onBarcodeScanned={({ data }) => {
+              if (data) {
+                handleQRScanned(data);
+              }
+            }}
+            barcodeScannerSettings={{
+              barcodeTypes: ['qr'],
+            }}
+          />
+          
+          <View style={styles.scannerOverlay}>
+            <View style={styles.scannerFrame} />
+            <ThemedText style={styles.scannerInstruction}>
+              Position the QR code within the frame
+            </ThemedText>
+          </View>
+        </View>
+      </Modal>
     </ThemedView>
   );
 }
@@ -371,5 +509,75 @@ const styles = StyleSheet.create({
   },
   saveButtonDisabled: {
     opacity: 0.6,
+  },
+  changeScanButton: {
+    backgroundColor: '#EF4444',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    marginTop: 12,
+    alignSelf: 'flex-start',
+  },
+  changeScanButtonText: {
+    color: '#ECEDEE',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  scannerContainer: {
+    flex: 1,
+    backgroundColor: '#0A0A0F',
+  },
+  scannerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 60,
+    paddingBottom: 20,
+    backgroundColor: '#1A1A24',
+  },
+  scannerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#ECEDEE',
+  },
+  closeScannerButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#2A2A3A',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  closeScannerText: {
+    fontSize: 20,
+    color: '#ECEDEE',
+    fontWeight: '600',
+  },
+  camera: {
+    flex: 1,
+  },
+  scannerOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingTop: 100,
+  },
+  scannerFrame: {
+    width: 250,
+    height: 250,
+    borderWidth: 2,
+    borderColor: '#EF4444',
+    borderRadius: 20,
+    backgroundColor: 'transparent',
+  },
+  scannerInstruction: {
+    marginTop: 20,
+    fontSize: 16,
+    color: '#ECEDEE',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
   },
 });

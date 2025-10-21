@@ -5,7 +5,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Modal, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import QRCode from 'react-native-qrcode-svg';
 
 interface Profile {
   user_id: string;
@@ -25,6 +26,7 @@ export default function ProfileScreen() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [stats, setStats] = useState<PlayerStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showQRModal, setShowQRModal] = useState(false);
 
   useEffect(() => {
     if (user?.id) {
@@ -137,7 +139,10 @@ export default function ProfileScreen() {
             <ThemedText style={styles.buttonText}>Manage Account</ThemedText>
           </TouchableOpacity>
           
-          <TouchableOpacity style={[styles.qrButton, { backgroundColor: '#EF4444' }]}>
+          <TouchableOpacity 
+            style={[styles.qrButton, { backgroundColor: '#EF4444' }]}
+            onPress={() => setShowQRModal(true)}
+          >
             <ThemedText style={styles.buttonText}>Show Profile QR</ThemedText>
           </TouchableOpacity>
           
@@ -152,44 +157,61 @@ export default function ProfileScreen() {
         <View style={styles.section}>
           <ThemedText style={styles.sectionTitle}>Game Records</ThemedText>
           <View style={[styles.recordsCard, { backgroundColor: '#1A1A24' }]}>
-            <ThemedText style={styles.gameName}>Spades</ThemedText>
-            <View style={styles.statsGrid}>
-              <View style={styles.statItem}>
-                <ThemedText style={styles.statNumber}>{String(stats?.wins || 0)}</ThemedText>
-                <ThemedText style={styles.statLabel}>WINS</ThemedText>
-              </View>
-              <View style={styles.statItem}>
-                <ThemedText style={styles.statNumber}>{String(stats?.losses || 0)}</ThemedText>
-                <ThemedText style={styles.statLabel}>LOSSES</ThemedText>
-              </View>
-              <View style={styles.statItem}>
-                <ThemedText style={styles.statNumber}>{String(stats?.games || 0)}</ThemedText>
-                <ThemedText style={styles.statLabel}>GAMES</ThemedText>
-              </View>
-              <View style={styles.statItem}>
-                <ThemedText style={styles.statNumber}>{getWinPercentage()}%</ThemedText>
-                <ThemedText style={styles.statLabel}>WIN %</ThemedText>
-              </View>
-            </View>
-          </View>
-        </View>
-        
-        {/* Quick Actions Section */}
-        <View style={styles.section}>
-          <ThemedText style={styles.sectionTitle}>Quick Actions</ThemedText>
-          <View style={styles.actionsGrid}>
-            <TouchableOpacity style={[styles.actionCard, { backgroundColor: '#1A1A24' }]}>
-              <ThemedText style={styles.actionTitle}>Share ID</ThemedText>
-              <ThemedText style={styles.actionDescription}>Invite friends to a table</ThemedText>
-            </TouchableOpacity>
-            
-            <TouchableOpacity style={[styles.actionCard, { backgroundColor: '#1A1A24' }]}>
-              <ThemedText style={styles.actionTitle}>History</ThemedText>
-              <ThemedText style={styles.actionDescription}>View full match log</ThemedText>
-            </TouchableOpacity>
+            <ThemedText style={styles.comingSoonText}>Coming Soon</ThemedText>
           </View>
         </View>
       </ScrollView>
+
+      {/* QR Code Modal */}
+      <Modal
+        visible={showQRModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowQRModal(false)}
+      >
+        <TouchableOpacity 
+          style={styles.modalOverlay} 
+          activeOpacity={1}
+          onPress={() => setShowQRModal(false)}
+        >
+          <View style={styles.qrModalContent}>
+            <TouchableOpacity 
+              style={styles.qrModalInner}
+              activeOpacity={1}
+              onPress={(e) => e.stopPropagation()}
+            >
+              <ThemedText style={styles.qrModalTitle}>Profile QR Code</ThemedText>
+              <ThemedText style={styles.qrModalSubtitle}>
+                {profile?.display_name || user?.email?.split('@')[0] || 'User'}
+              </ThemedText>
+              
+              <View style={styles.qrCodeContainer}>
+                <QRCode
+                  value={JSON.stringify({ 
+                    type: 'profile', 
+                    userId: user?.id, 
+                    displayName: profile?.display_name || user?.email?.split('@')[0] || 'User'
+                  })}
+                  size={240}
+                  backgroundColor="white"
+                  color="black"
+                />
+              </View>
+              
+              <ThemedText style={styles.qrModalDescription}>
+                Share this QR code with others to connect your profile
+              </ThemedText>
+              
+              <TouchableOpacity 
+                style={styles.closeButton}
+                onPress={() => setShowQRModal(false)}
+              >
+                <ThemedText style={styles.closeButtonText}>Close</ThemedText>
+              </TouchableOpacity>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </ThemedView>
   );
 }
@@ -292,6 +314,12 @@ const styles = StyleSheet.create({
     color: '#ECEDEE',
     marginBottom: 16,
   },
+  comingSoonText: {
+    fontSize: 16,
+    color: '#9BA1A6',
+    textAlign: 'center',
+    paddingVertical: 20,
+  },
   statsGrid: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -321,23 +349,59 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#9BA1A6',
   },
-  actionsGrid: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  actionCard: {
+  modalOverlay: {
     flex: 1,
-    padding: 16,
-    borderRadius: 12,
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  actionTitle: {
+  qrModalContent: {
+    width: '85%',
+    maxWidth: 400,
+  },
+  qrModalInner: {
+    backgroundColor: '#1A1A24',
+    borderRadius: 20,
+    padding: 30,
+    alignItems: 'center',
+  },
+  qrModalTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#ECEDEE',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  qrModalSubtitle: {
+    fontSize: 16,
+    color: '#9BA1A6',
+    marginBottom: 24,
+    textAlign: 'center',
+  },
+  qrCodeContainer: {
+    backgroundColor: 'white',
+    padding: 20,
+    borderRadius: 16,
+    marginBottom: 24,
+  },
+  qrModalDescription: {
+    fontSize: 14,
+    color: '#9BA1A6',
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 20,
+  },
+  closeButton: {
+    backgroundColor: '#EF4444',
+    paddingVertical: 14,
+    paddingHorizontal: 32,
+    borderRadius: 12,
+    width: '100%',
+  },
+  closeButtonText: {
+    color: '#ECEDEE',
     fontSize: 16,
     fontWeight: '600',
-    color: '#ECEDEE',
-    marginBottom: 4,
-  },
-  actionDescription: {
-    fontSize: 12,
-    color: '#9BA1A6',
+    textAlign: 'center',
   },
 });
