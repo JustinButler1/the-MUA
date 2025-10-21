@@ -37,19 +37,115 @@ export default function LiveSpadesScreen() {
   const colorScheme = useColorScheme();
   const [team1Score, setTeam1Score] = useState(0);
   const [team2Score, setTeam2Score] = useState(0);
-  const [targetScore] = useState(500);
   const [gameHands, setGameHands] = useState(hands);
   const [selectedTeam1, setSelectedTeam1] = useState(availableTeams[0]);
   const [showTeamSelection, setShowTeamSelection] = useState(false);
+  const [showBidModal, setShowBidModal] = useState(false);
+  const [showBookModal, setShowBookModal] = useState(false);
+  const [showUndoModal, setShowUndoModal] = useState(false);
+  const [showTargetScoreModal, setShowTargetScoreModal] = useState(false);
+  const [team1Bid, setTeam1Bid] = useState(0);
+  const [team2Bid, setTeam2Bid] = useState(0);
+  const [team1Book, setTeam1Book] = useState(0);
+  const [team2Book, setTeam2Book] = useState(0);
+  const [waitingForBooks, setWaitingForBooks] = useState(false);
+  const [targetScore, setTargetScore] = useState(500);
+  const [tempTargetScore, setTempTargetScore] = useState(500);
 
   const addHand = () => {
-    // This would open a modal or navigate to add hand screen
-    console.log('Add hand pressed');
+    if (waitingForBooks) {
+      setShowBookModal(true);
+    } else {
+      setShowBidModal(true);
+    }
   };
 
   const undoLast = () => {
-    // This would undo the last hand
-    console.log('Undo last pressed');
+    if (gameHands.length === 0) {
+      // Don't show modal if there are no hands
+      return;
+    }
+    setShowUndoModal(true);
+  };
+
+  const confirmUndo = () => {
+    if (gameHands.length === 0) {
+      setShowUndoModal(false);
+      return;
+    }
+
+    const lastHand = gameHands[gameHands.length - 1];
+    const updatedHands = [...gameHands];
+    
+    if (lastHand.status === 'completed') {
+      // Last action was adding books - revert to waiting for books
+      // Subtract the points from scores
+      setTeam1Score(prevScore => prevScore - (lastHand.team1Points || 0));
+      setTeam2Score(prevScore => prevScore - (lastHand.team2Points || 0));
+      
+      // Update the hand to remove books and go back to waiting state
+      updatedHands[updatedHands.length - 1] = {
+        ...lastHand,
+        team1Books: null,
+        team2Books: null,
+        team1Points: undefined,
+        team2Points: undefined,
+        status: 'waiting_for_books'
+      };
+      
+      setGameHands(updatedHands);
+      setWaitingForBooks(true);
+    } else if (lastHand.status === 'waiting_for_books') {
+      // Last action was adding bids - remove the entire hand
+      updatedHands.pop();
+      setGameHands(updatedHands);
+      
+      // Check if there's still a hand waiting for books
+      if (updatedHands.length > 0) {
+        const newLastHand = updatedHands[updatedHands.length - 1];
+        if (newLastHand.status === 'waiting_for_books') {
+          setWaitingForBooks(true);
+        } else {
+          setWaitingForBooks(false);
+        }
+      } else {
+        setWaitingForBooks(false);
+      }
+    }
+    
+    setShowUndoModal(false);
+  };
+
+  const cancelUndo = () => {
+    setShowUndoModal(false);
+  };
+
+  const openTargetScoreModal = () => {
+    setTempTargetScore(targetScore);
+    setShowTargetScoreModal(true);
+  };
+
+  const incrementTargetScore = () => {
+    setTempTargetScore(prev => {
+      if (prev === 500) return 100;
+      return prev + 50;
+    });
+  };
+
+  const decrementTargetScore = () => {
+    setTempTargetScore(prev => {
+      if (prev === 100) return 500;
+      return prev - 50;
+    });
+  };
+
+  const saveTargetScore = () => {
+    setTargetScore(tempTargetScore);
+    setShowTargetScoreModal(false);
+  };
+
+  const cancelTargetScore = () => {
+    setShowTargetScoreModal(false);
   };
 
   const finishGame = () => {
@@ -65,6 +161,122 @@ export default function LiveSpadesScreen() {
   const selectTeam = (team: typeof availableTeams[0]) => {
     setSelectedTeam1(team);
     setShowTeamSelection(false);
+  };
+
+  const incrementTeam1Bid = () => {
+    setTeam1Bid(prev => {
+      if (prev === 13) return 0;
+      if (prev === 0) return 4;
+      return prev + 1;
+    });
+  };
+
+  const decrementTeam1Bid = () => {
+    setTeam1Bid(prev => {
+      if (prev === 0) return 13;
+      if (prev === 4) return 0;
+      return prev - 1;
+    });
+  };
+
+  const incrementTeam2Bid = () => {
+    setTeam2Bid(prev => {
+      if (prev === 13) return 0;
+      if (prev === 0) return 4;
+      return prev + 1;
+    });
+  };
+
+  const decrementTeam2Bid = () => {
+    setTeam2Bid(prev => {
+      if (prev === 0) return 13;
+      if (prev === 4) return 0;
+      return prev - 1;
+    });
+  };
+
+  const incrementTeam1Book = () => {
+    setTeam1Book(prev => {
+      if (prev === 13) return 0;
+      return prev + 1;
+    });
+  };
+
+  const decrementTeam1Book = () => {
+    setTeam1Book(prev => {
+      if (prev === 0) return 13;
+      return prev - 1;
+    });
+  };
+
+  const incrementTeam2Book = () => {
+    setTeam2Book(prev => {
+      if (prev === 13) return 0;
+      return prev + 1;
+    });
+  };
+
+  const decrementTeam2Book = () => {
+    setTeam2Book(prev => {
+      if (prev === 0) return 13;
+      return prev - 1;
+    });
+  };
+
+  const saveBid = () => {
+    // Create new hand entry with bids
+    const newHand = {
+      id: Date.now(),
+      team1Bid,
+      team2Bid,
+      team1Books: null,
+      team2Books: null,
+      status: 'waiting_for_books'
+    };
+    
+    setGameHands([...gameHands, newHand]);
+    setWaitingForBooks(true);
+    setShowBidModal(false);
+  };
+
+  const saveBook = () => {
+    // Update the last hand with book values
+    const updatedHands = [...gameHands];
+    const lastHandIndex = updatedHands.length - 1;
+    const lastHand = updatedHands[lastHandIndex];
+    
+    // Calculate scores for each team
+    const calculateScore = (bid: number, books: number) => {
+      if (books >= bid) {
+        // Made the bid: 10 points per bid + 1 point per overtrick (bag)
+        const bidPoints = bid * 10;
+        const bags = books - bid;
+        return bidPoints + bags;
+      } else {
+        // Failed to make bid: lose 10 points per bid
+        return bid * -10;
+      }
+    };
+    
+    const team1Points = calculateScore(lastHand.team1Bid, team1Book);
+    const team2Points = calculateScore(lastHand.team2Bid, team2Book);
+    
+    updatedHands[lastHandIndex] = {
+      ...updatedHands[lastHandIndex],
+      team1Books: team1Book,
+      team2Books: team2Book,
+      team1Points,
+      team2Points,
+      status: 'completed'
+    };
+    
+    setGameHands(updatedHands);
+    setTeam1Score(prevScore => prevScore + team1Points);
+    setTeam2Score(prevScore => prevScore + team2Points);
+    setWaitingForBooks(false);
+    setTeam1Book(0);
+    setTeam2Book(0);
+    setShowBookModal(false);
   };
 
   return (
@@ -107,9 +319,12 @@ export default function LiveSpadesScreen() {
         <View style={styles.section}>
           <View style={styles.scoreHeader}>
             <ThemedText style={styles.sectionLabel}>CURRENT SCORE</ThemedText>
-            <View style={styles.targetScorePill}>
+            <TouchableOpacity 
+              style={styles.targetScorePill}
+              onPress={openTargetScoreModal}
+            >
               <ThemedText style={styles.targetScoreText}>{targetScore} pts</ThemedText>
-            </View>
+            </TouchableOpacity>
           </View>
           <View style={styles.scoreDisplay}>
             <ThemedText style={styles.scoreText}>{team1Score} - {team2Score}</ThemedText>
@@ -124,13 +339,59 @@ export default function LiveSpadesScreen() {
               <View style={styles.emptyHands}>
                 <ThemedText style={styles.emptyHandsTitle}>No hands yet</ThemedText>
                 <ThemedText style={styles.emptyHandsDescription}>
-                  Tap 'Add Hand' to capture bids and books for each round.
+                  Tap 'Add Bid' to capture bids and books for each round.
                 </ThemedText>
               </View>
             ) : (
-              <View>
-                {/* This would render the hands list */}
-                <ThemedText style={styles.handsList}>Hands will appear here</ThemedText>
+              <View style={styles.handsList}>
+                {gameHands.map((hand, index) => (
+                  <View key={hand.id} style={styles.handItem}>
+                    <ThemedText style={styles.handNumber}>Hand {index + 1}</ThemedText>
+                    <View style={styles.handDetails}>
+                      <View style={styles.handTeamRow}>
+                        <ThemedText style={styles.handLabel}>Team 1 Bid:</ThemedText>
+                        <ThemedText style={styles.handValue}>{hand.team1Bid}</ThemedText>
+                      </View>
+                      <View style={styles.handTeamRow}>
+                        <ThemedText style={styles.handLabel}>Team 2 Bid:</ThemedText>
+                        <ThemedText style={styles.handValue}>{hand.team2Bid}</ThemedText>
+                      </View>
+                      {hand.status === 'waiting_for_books' ? (
+                        <ThemedText style={styles.waitingText}>Waiting for books...</ThemedText>
+                      ) : (
+                        <>
+                          <View style={styles.handTeamRow}>
+                            <ThemedText style={styles.handLabel}>Team 1 Books:</ThemedText>
+                            <ThemedText style={styles.handValue}>{hand.team1Books}</ThemedText>
+                          </View>
+                          <View style={styles.handTeamRow}>
+                            <ThemedText style={styles.handLabel}>Team 2 Books:</ThemedText>
+                            <ThemedText style={styles.handValue}>{hand.team2Books}</ThemedText>
+                          </View>
+                          <View style={styles.handDivider} />
+                          <View style={styles.handTeamRow}>
+                            <ThemedText style={styles.handLabel}>Team 1 Points:</ThemedText>
+                            <ThemedText style={[
+                              styles.handValue,
+                              hand.team1Points > 0 ? styles.positivePoints : styles.negativePoints
+                            ]}>
+                              {hand.team1Points > 0 ? '+' : ''}{hand.team1Points}
+                            </ThemedText>
+                          </View>
+                          <View style={styles.handTeamRow}>
+                            <ThemedText style={styles.handLabel}>Team 2 Points:</ThemedText>
+                            <ThemedText style={[
+                              styles.handValue,
+                              hand.team2Points > 0 ? styles.positivePoints : styles.negativePoints
+                            ]}>
+                              {hand.team2Points > 0 ? '+' : ''}{hand.team2Points}
+                            </ThemedText>
+                          </View>
+                        </>
+                      )}
+                    </View>
+                  </View>
+                ))}
               </View>
             )}
           </View>
@@ -140,7 +401,9 @@ export default function LiveSpadesScreen() {
         <View style={styles.actionButtons}>
           <View style={styles.topButtons}>
             <TouchableOpacity style={styles.addHandButton} onPress={addHand}>
-              <ThemedText style={styles.addHandButtonText}>Add Hand</ThemedText>
+              <ThemedText style={styles.addHandButtonText}>
+                {waitingForBooks ? 'Add Book' : 'Add Bid'}
+              </ThemedText>
             </TouchableOpacity>
             
             <TouchableOpacity style={styles.undoButton} onPress={undoLast}>
@@ -190,6 +453,230 @@ export default function LiveSpadesScreen() {
                 </TouchableOpacity>
               ))}
             </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Add Bid Modal */}
+      <Modal
+        visible={showBidModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowBidModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.bidModalContent}>
+            <ThemedText style={styles.modalTitle}>Add Bid</ThemedText>
+            
+            <View style={styles.bidsContainer}>
+              {/* Team 1 Bid */}
+              <View style={styles.bidSection}>
+                <ThemedText style={styles.bidTeamHeader}>Team 1</ThemedText>
+                <View style={styles.bidControls}>
+                  <TouchableOpacity 
+                    style={styles.bidButton}
+                    onPress={decrementTeam1Bid}
+                  >
+                    <ThemedText style={styles.bidButtonText}>-</ThemedText>
+                  </TouchableOpacity>
+                  <ThemedText style={styles.bidValue}>{team1Bid}</ThemedText>
+                  <TouchableOpacity 
+                    style={styles.bidButton}
+                    onPress={incrementTeam1Bid}
+                  >
+                    <ThemedText style={styles.bidButtonText}>+</ThemedText>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* Team 2 Bid */}
+              <View style={styles.bidSection}>
+                <ThemedText style={styles.bidTeamHeader}>Team 2</ThemedText>
+                <View style={styles.bidControls}>
+                  <TouchableOpacity 
+                    style={styles.bidButton}
+                    onPress={decrementTeam2Bid}
+                  >
+                    <ThemedText style={styles.bidButtonText}>-</ThemedText>
+                  </TouchableOpacity>
+                  <ThemedText style={styles.bidValue}>{team2Bid}</ThemedText>
+                  <TouchableOpacity 
+                    style={styles.bidButton}
+                    onPress={incrementTeam2Bid}
+                  >
+                    <ThemedText style={styles.bidButtonText}>+</ThemedText>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+
+            {/* Modal Actions */}
+            <View style={styles.bidModalActions}>
+              <TouchableOpacity 
+                style={styles.cancelButton}
+                onPress={() => setShowBidModal(false)}
+              >
+                <ThemedText style={styles.cancelButtonText}>Cancel</ThemedText>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.saveButton}
+                onPress={saveBid}
+              >
+                <ThemedText style={styles.saveButtonText}>Save</ThemedText>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Add Book Modal */}
+      <Modal
+        visible={showBookModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowBookModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.bidModalContent}>
+            <ThemedText style={styles.modalTitle}>Add Book</ThemedText>
+            
+            <View style={styles.bidsContainer}>
+              {/* Team 1 Book */}
+              <View style={styles.bidSection}>
+                <ThemedText style={styles.bidTeamHeader}>Team 1</ThemedText>
+                <View style={styles.bidControls}>
+                  <TouchableOpacity 
+                    style={styles.bidButton}
+                    onPress={decrementTeam1Book}
+                  >
+                    <ThemedText style={styles.bidButtonText}>-</ThemedText>
+                  </TouchableOpacity>
+                  <ThemedText style={styles.bidValue}>{team1Book}</ThemedText>
+                  <TouchableOpacity 
+                    style={styles.bidButton}
+                    onPress={incrementTeam1Book}
+                  >
+                    <ThemedText style={styles.bidButtonText}>+</ThemedText>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* Team 2 Book */}
+              <View style={styles.bidSection}>
+                <ThemedText style={styles.bidTeamHeader}>Team 2</ThemedText>
+                <View style={styles.bidControls}>
+                  <TouchableOpacity 
+                    style={styles.bidButton}
+                    onPress={decrementTeam2Book}
+                  >
+                    <ThemedText style={styles.bidButtonText}>-</ThemedText>
+                  </TouchableOpacity>
+                  <ThemedText style={styles.bidValue}>{team2Book}</ThemedText>
+                  <TouchableOpacity 
+                    style={styles.bidButton}
+                    onPress={incrementTeam2Book}
+                  >
+                    <ThemedText style={styles.bidButtonText}>+</ThemedText>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+
+            {/* Modal Actions */}
+            <View style={styles.bidModalActions}>
+              <TouchableOpacity 
+                style={styles.cancelButton}
+                onPress={() => setShowBookModal(false)}
+              >
+                <ThemedText style={styles.cancelButtonText}>Cancel</ThemedText>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.saveButton}
+                onPress={saveBook}
+              >
+                <ThemedText style={styles.saveButtonText}>Save</ThemedText>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Undo Confirmation Modal */}
+      <Modal
+        visible={showUndoModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowUndoModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.confirmModalContent}>
+            <ThemedText style={styles.modalTitle}>Are you sure?</ThemedText>
+            <ThemedText style={styles.confirmModalText}>
+              Do you want to undo the last hand?
+            </ThemedText>
+            
+            <View style={styles.bidModalActions}>
+              <TouchableOpacity 
+                style={styles.cancelButton}
+                onPress={cancelUndo}
+              >
+                <ThemedText style={styles.cancelButtonText}>Cancel</ThemedText>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.saveButton}
+                onPress={confirmUndo}
+              >
+                <ThemedText style={styles.saveButtonText}>Confirm</ThemedText>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Target Score Modal */}
+      <Modal
+        visible={showTargetScoreModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowTargetScoreModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.bidModalContent}>
+            <ThemedText style={styles.modalTitle}>Target Score</ThemedText>
+            
+            <View style={styles.targetScoreSection}>
+              <View style={styles.bidControls}>
+                <TouchableOpacity 
+                  style={styles.bidButton}
+                  onPress={decrementTargetScore}
+                >
+                  <ThemedText style={styles.bidButtonText}>-</ThemedText>
+                </TouchableOpacity>
+                <ThemedText style={styles.bidValue}>{tempTargetScore}</ThemedText>
+                <TouchableOpacity 
+                  style={styles.bidButton}
+                  onPress={incrementTargetScore}
+                >
+                  <ThemedText style={styles.bidButtonText}>+</ThemedText>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Modal Actions */}
+            <View style={styles.bidModalActions}>
+              <TouchableOpacity 
+                style={styles.cancelButton}
+                onPress={cancelTargetScore}
+              >
+                <ThemedText style={styles.cancelButtonText}>Cancel</ThemedText>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.saveButton}
+                onPress={saveTargetScore}
+              >
+                <ThemedText style={styles.saveButtonText}>Confirm</ThemedText>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -337,8 +824,54 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   handsList: {
+    gap: 12,
+  },
+  handItem: {
+    backgroundColor: '#2A2A2A',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+  handNumber: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#EF4444',
+    marginBottom: 12,
+  },
+  handDetails: {
+    gap: 8,
+  },
+  handTeamRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  handLabel: {
     fontSize: 14,
+    color: '#9BA1A6',
+  },
+  handValue: {
+    fontSize: 16,
+    fontWeight: '600',
     color: '#ECEDEE',
+  },
+  waitingText: {
+    fontSize: 14,
+    color: '#EF4444',
+    fontStyle: 'italic',
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  handDivider: {
+    height: 1,
+    backgroundColor: '#3A3A3A',
+    marginVertical: 8,
+  },
+  positivePoints: {
+    color: '#22C55E',
+  },
+  negativePoints: {
+    color: '#EF4444',
   },
   actionButtons: {
     marginTop: 32,
@@ -437,5 +970,98 @@ const styles = StyleSheet.create({
   },
   teamOptionMembersSelected: {
     color: '#ECEDEE',
+  },
+  // Bid Modal styles
+  bidModalContent: {
+    backgroundColor: '#1A1A24',
+    borderRadius: 16,
+    padding: 24,
+    width: '100%',
+  },
+  bidsContainer: {
+    gap: 24,
+    marginBottom: 24,
+  },
+  bidSection: {
+    alignItems: 'center',
+  },
+  bidTeamHeader: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#ECEDEE',
+    marginBottom: 16,
+  },
+  bidControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 24,
+  },
+  bidButton: {
+    backgroundColor: '#EF4444',
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  bidButtonText: {
+    color: '#ECEDEE',
+    fontSize: 32,
+    fontWeight: '600',
+  },
+  bidValue: {
+    fontSize: 48,
+    fontWeight: 'bold',
+    color: '#ECEDEE',
+    minWidth: 80,
+    textAlign: 'center',
+  },
+  bidModalActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  cancelButton: {
+    flex: 1,
+    backgroundColor: '#2A2A2A',
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+  },
+  cancelButtonText: {
+    color: '#ECEDEE',
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  saveButton: {
+    flex: 1,
+    backgroundColor: '#EF4444',
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+  },
+  saveButtonText: {
+    color: '#ECEDEE',
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  // Confirmation Modal styles
+  confirmModalContent: {
+    backgroundColor: '#1A1A24',
+    borderRadius: 16,
+    padding: 24,
+    width: '85%',
+  },
+  confirmModalText: {
+    fontSize: 16,
+    color: '#9BA1A6',
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 24,
+  },
+  targetScoreSection: {
+    alignItems: 'center',
+    marginBottom: 24,
   },
 });
