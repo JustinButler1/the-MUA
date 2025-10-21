@@ -52,6 +52,7 @@ export default function GameDetailsScreen() {
           .select(`
             id,
             started_at,
+            goal_score,
             team1_id,
             team2_id,
             team1:teams!team1_id(name),
@@ -141,7 +142,7 @@ export default function GameDetailsScreen() {
           team1: team1Name,
           team2: team2Name,
           finalScore: `${outcomeData.team1_total} - ${outcomeData.team2_total}`,
-          goal: '500 pts', // You could make this dynamic if stored in DB
+          goal: `${gameData.goal_score || 500} pts`,
           started: formatDate(gameData.started_at),
           ended: formatDate(outcomeData.completed_at),
           rounds,

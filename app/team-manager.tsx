@@ -216,8 +216,8 @@ export default function TeamManagerScreen() {
                 <ThemedText style={styles.memberType}>{member.type}</ThemedText>
               </View>
               {member.type === 'GUEST PLAYER' && (
-                <TouchableOpacity style={styles.replaceButton}>
-                  <ThemedText style={styles.replaceButtonText}>Replace with Registered Player</ThemedText>
+                <TouchableOpacity style={styles.replaceButtonDisabled} disabled>
+                  <ThemedText style={styles.replaceButtonTextDisabled}>Replace with Registered Player (Coming Soon)</ThemedText>
                 </TouchableOpacity>
               )}
             </View>
@@ -230,12 +230,12 @@ export default function TeamManagerScreen() {
             <ThemedText style={styles.buttonText}>Show Team QR</ThemedText>
           </TouchableOpacity>
           
-          <TouchableOpacity style={styles.secondaryButton} onPress={handleSaveChanges}>
-            <ThemedText style={styles.buttonText}>Save Changes</ThemedText>
+          <TouchableOpacity style={styles.disabledButton} disabled>
+            <ThemedText style={styles.disabledButtonText}>Save Changes (Coming Soon)</ThemedText>
           </TouchableOpacity>
           
-          <TouchableOpacity style={styles.dangerButton} onPress={handleArchiveTeam}>
-            <ThemedText style={styles.buttonText}>Archive Team</ThemedText>
+          <TouchableOpacity style={styles.disabledButton} disabled>
+            <ThemedText style={styles.disabledButtonText}>Archive Team (Coming Soon)</ThemedText>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -377,6 +377,19 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
+  replaceButtonDisabled: {
+    backgroundColor: '#2A2A3A',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+    opacity: 0.5,
+  },
+  replaceButtonTextDisabled: {
+    color: '#9BA1A6',
+    fontSize: 12,
+    fontWeight: '600',
+  },
   actionButtons: {
     gap: 16,
     marginTop: 20,
@@ -399,8 +412,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     borderRadius: 12,
   },
+  disabledButton: {
+    backgroundColor: '#2A2A3A',
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    opacity: 0.5,
+  },
   buttonText: {
     color: '#ECEDEE',
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  disabledButtonText: {
+    color: '#9BA1A6',
     fontSize: 16,
     fontWeight: '600',
     textAlign: 'center',

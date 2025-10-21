@@ -279,6 +279,7 @@ export default function LiveSpadesScreen() {
         .insert({
           team1_id: selectedTeam1.id,
           team2_id: selectedTeam2.id,
+          goal_score: targetScore,
           started_at: gameStartTime.toISOString(),
           status: 'completed',
           created_by: user.id,
