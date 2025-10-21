@@ -263,7 +263,7 @@ export default function TeamManagerScreen() {
               
               <View style={styles.qrCodeContainer}>
                 <QRCode
-                  value={teamId || ''}
+                  value={JSON.stringify({ type: 'team', teamId: teamId, teamName: team.name })}
                   size={240}
                   backgroundColor="white"
                   color="black"

@@ -2,6 +2,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { supabase } from '@/lib/supabase';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useState } from 'react';
 import { Alert, Modal, ScrollView, StatusBar, StyleSheet, TouchableOpacity, View } from 'react-native';
@@ -40,6 +41,7 @@ export default function LiveSpadesScreen() {
   const [team2Score, setTeam2Score] = useState(0);
   const [gameHands, setGameHands] = useState(hands);
   const [selectedTeam1, setSelectedTeam1] = useState(availableTeams[0]);
+  const [selectedTeam2, setSelectedTeam2] = useState<typeof availableTeams[0] | null>(null);
   const [showTeamSelection, setShowTeamSelection] = useState(false);
   const [showBidModal, setShowBidModal] = useState(false);
   const [showBookModal, setShowBookModal] = useState(false);
@@ -177,34 +179,71 @@ export default function LiveSpadesScreen() {
     setShowQRScanner(true);
   };
 
-  const validateQRCode = (data: string): boolean => {
-    // For now, we'll check if the QR code contains a team ID
-    // Format: team:{teamId} or just check if it's in our availableTeams
+  const fetchTeamFromQRCode = async (data: string): Promise<typeof availableTeams[0] | null> => {
     try {
-      // Try to parse as JSON first
+      // Try to parse as JSON
       const parsed = JSON.parse(data);
       if (parsed.type === 'team' && parsed.teamId) {
-        // Check if team exists in our available teams
-        return availableTeams.some(team => team.id === parsed.teamId);
+        // Fetch team data from Supabase
+        const { data: teamData, error: teamError } = await supabase
+          .from('teams')
+          .select('id, name')
+          .eq('id', parsed.teamId)
+          .single();
+
+        if (teamError || !teamData) {
+          console.error('Error fetching team:', teamError);
+          return null;
+        }
+
+        // Fetch team members
+        const { data: membersData, error: membersError } = await supabase
+          .from('team_members')
+          .select(`
+            slot,
+            profiles(display_name),
+            team_guests(display_name)
+          `)
+          .eq('team_id', parsed.teamId)
+          .order('slot', { ascending: true });
+
+        if (membersError) {
+          console.error('Error fetching team members:', membersError);
+        }
+
+        // Format members list
+        const memberNames = membersData?.map((member: any) => {
+          if (member.profiles?.display_name) {
+            return member.profiles.display_name;
+          } else if (member.team_guests?.display_name) {
+            return member.team_guests.display_name;
+          }
+          return null;
+        }).filter((name): name is string => name !== null) || [];
+
+        return {
+          id: teamData.id,
+          name: teamData.name,
+          members: memberNames.join(' · '),
+        };
       }
-    } catch {
-      // If not JSON, check if it matches team:{id} format
-      if (data.startsWith('team:')) {
-        const teamId = data.split(':')[1];
-        return availableTeams.some(team => team.id === teamId);
-      }
+    } catch (error) {
+      console.error('Error parsing QR code:', error);
     }
-    return false;
+    return null;
   };
 
-  const handleBarcodeScanned = ({ data }: { type: string; data: string }) => {
+  const handleBarcodeScanned = async ({ data }: { type: string; data: string }) => {
     if (hasScanned) return;
     
     setHasScanned(true);
-    const isValid = validateQRCode(data);
     
-    if (isValid) {
-      Alert.alert('Valid QR Code', 'This is a valid team QR code!', [
+    // Show loading state
+    const team = await fetchTeamFromQRCode(data);
+    
+    if (team) {
+      setSelectedTeam2(team);
+      Alert.alert('Team Added', `${team.name} has been set as Team 2!`, [
         {
           text: 'OK',
           onPress: () => setShowQRScanner(false),
@@ -367,14 +406,25 @@ export default function LiveSpadesScreen() {
         {/* Team 2 Section */}
         <View style={styles.section}>
           <ThemedText style={styles.sectionLabel}>TEAM 2</ThemedText>
-          <View style={styles.teamCard}>
-            <ThemedText style={styles.teamInstructions}>
-              Scan the team QR from its details page to set the opponent.
-            </ThemedText>
-            <TouchableOpacity style={styles.scanQRButton} onPress={scanTeamQR}>
-              <ThemedText style={styles.scanQRButtonText}>Scan Team QR</ThemedText>
+          {selectedTeam2 ? (
+            <TouchableOpacity 
+              style={styles.teamCard}
+              onPress={scanTeamQR}
+            >
+              <ThemedText style={styles.teamName}>{selectedTeam2.name}</ThemedText>
+              <ThemedText style={styles.teamMembers}>{selectedTeam2.members}</ThemedText>
+              <ThemedText style={styles.tapToChangeText}>Tap to scan a different team</ThemedText>
             </TouchableOpacity>
-          </View>
+          ) : (
+            <View style={styles.teamCard}>
+              <ThemedText style={styles.teamInstructions}>
+                Scan the team QR from its details page to set the opponent.
+              </ThemedText>
+              <TouchableOpacity style={styles.scanQRButton} onPress={scanTeamQR}>
+                <ThemedText style={styles.scanQRButtonText}>Scan Team QR</ThemedText>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
 
         {/* Current Score Section */}
@@ -855,6 +905,12 @@ const styles = StyleSheet.create({
   teamMembers: {
     fontSize: 14,
     color: '#9BA1A6',
+  },
+  tapToChangeText: {
+    fontSize: 12,
+    color: '#9BA1A6',
+    marginTop: 8,
+    fontStyle: 'italic',
   },
   teamInstructions: {
     fontSize: 14,
