@@ -10,9 +10,21 @@ export default function GamesStackLayout() {
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="[gameId]" options={{ headerShown: false }} />
-        <Stack.Screen name="live" options={{ headerShown: false }} />
+      <Stack screenOptions={{ headerShown: true, headerBackTitle: 'Back' }}>
+        <Stack.Screen 
+          name="[gameId]" 
+          options={{ 
+            title: 'Game Details',
+            presentation: 'card',
+          }} 
+        />
+        <Stack.Screen 
+          name="live" 
+          options={{ 
+            title: 'Live Game',
+            presentation: 'card',
+          }} 
+        />
       </Stack>
       <StatusBar style="auto" />
     </ThemeProvider>

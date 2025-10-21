@@ -11,8 +11,12 @@ export default function GamesLayout() {
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <Stack>
-        <Stack.Screen name="index" options={{ headerShown: false }} />
-        <Stack.Screen name="spades" options={{ headerShown: false }} />
+        <Stack.Screen name="index" options={{
+            headerShown: false }} />
+        <Stack.Screen name="spades" options={{
+            title: 'Spades Games',
+            headerBackTitle: 'Arena',
+            headerShown: true }} />
       </Stack>
       <StatusBar style="auto" />
     </ThemeProvider>

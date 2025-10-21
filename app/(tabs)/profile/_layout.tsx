@@ -10,9 +10,20 @@ export default function ProfileLayout() {
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="index" options={{ headerShown: false }} />
-        <Stack.Screen name="account" options={{ headerShown: false }} />
+      <Stack screenOptions={{ headerShown: true }}>
+        <Stack.Screen 
+          name="index" 
+          options={{ 
+            headerShown: false,
+          }} 
+        />
+        <Stack.Screen 
+          name="account" 
+          options={{ 
+            title: 'Account Management',
+            headerBackTitle: 'Profile',
+          }} 
+        />
       </Stack>
       <StatusBar style="auto" />
     </ThemeProvider>

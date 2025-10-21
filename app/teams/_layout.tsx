@@ -10,9 +10,21 @@ export default function TeamsLayout() {
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="create" options={{ headerShown: false }} />
-        <Stack.Screen name="[teamId]" options={{ headerShown: false }} />
+      <Stack screenOptions={{ headerShown: true, headerBackTitle: 'Back' }}>
+        <Stack.Screen 
+          name="create" 
+          options={{ 
+            title: 'Create Team',
+            presentation: 'card',
+          }} 
+        />
+        <Stack.Screen 
+          name="[teamId]" 
+          options={{ 
+            title: 'Team Details',
+            presentation: 'card',
+          }} 
+        />
       </Stack>
       <StatusBar style="auto" />
     </ThemeProvider>

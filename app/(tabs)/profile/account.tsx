@@ -4,8 +4,7 @@ import { Colors } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import { ScrollView, StatusBar, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 
 export default function AccountManagementScreen() {
   const colorScheme = useColorScheme();
@@ -13,20 +12,6 @@ export default function AccountManagementScreen() {
 
   return (
     <ThemedView style={[styles.container, { backgroundColor: Colors[colorScheme ?? 'dark'].background }]}>
-      <StatusBar barStyle="light-content" backgroundColor="#0A0A0F" />
-
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity 
-          style={styles.backButton}
-          onPress={() => router.back()}
-        >
-          <Ionicons name="arrow-back" size={20} color="#0A0A0F" />
-          <ThemedText style={styles.backButtonText}>Back</ThemedText>
-        </TouchableOpacity>
-        <ThemedText style={styles.headerTitle}>Account Management</ThemedText>
-      </View>
-
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* Archived Teams Section */}
         <View style={styles.section}>
@@ -84,34 +69,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  header: {
-    paddingHorizontal: 20,
-    paddingTop: 60,
-    paddingBottom: 20,
-  },
-  backButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#ECEDEE',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    alignSelf: 'flex-start',
-  },
-  backButtonText: {
-    color: '#0A0A0F',
-    fontSize: 14,
-    fontWeight: '600',
-    marginLeft: 8,
-  },
-  headerTitle: {
-    color: '#ECEDEE',
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginTop: 16,
-  },
   scrollContent: {
     paddingHorizontal: 20,
+    paddingTop: 20,
     paddingBottom: 40,
   },
   section: {

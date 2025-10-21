@@ -459,7 +459,7 @@ const styles = StyleSheet.create({
   },
   addGameButton: {
     position: 'absolute',
-    bottom: 50,
+    bottom: 30,
     left: 20,
     right: 20,
     backgroundColor: '#EF4444',
