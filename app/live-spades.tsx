@@ -1,35 +1,19 @@
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Colors } from '@/constants/theme';
+import { useAuth } from '@/contexts/AuthContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { useState } from 'react';
-import { Alert, Modal, ScrollView, StatusBar, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useState } from 'react';
+import { ActivityIndicator, Alert, Modal, ScrollView, StatusBar, StyleSheet, TouchableOpacity, View } from 'react-native';
 
-// Mock data
-const availableTeams = [
-  {
-    id: '1',
-    name: 'New Boiled',
-    members: 'Test · Nana',
-  },
-  {
-    id: '2',
-    name: 'yes team test team',
-    members: 'Test · guestalex',
-  },
-  {
-    id: '3',
-    name: 'Spades Champions',
-    members: 'Alice · Bob',
-  },
-  {
-    id: '4',
-    name: 'Card Masters',
-    members: 'Charlie · Diana',
-  },
-];
+interface Team {
+  id: string;
+  name: string;
+  members: string;
+}
 
 const hands: any[] = [
   // Mock hands data - empty initially
@@ -37,11 +21,13 @@ const hands: any[] = [
 
 export default function LiveSpadesScreen() {
   const colorScheme = useColorScheme();
+  const { user } = useAuth();
   const [team1Score, setTeam1Score] = useState(0);
   const [team2Score, setTeam2Score] = useState(0);
   const [gameHands, setGameHands] = useState(hands);
-  const [selectedTeam1, setSelectedTeam1] = useState(availableTeams[0]);
-  const [selectedTeam2, setSelectedTeam2] = useState<typeof availableTeams[0] | null>(null);
+  const [availableTeams, setAvailableTeams] = useState<Team[]>([]);
+  const [selectedTeam1, setSelectedTeam1] = useState<Team | null>(null);
+  const [selectedTeam2, setSelectedTeam2] = useState<Team | null>(null);
   const [showTeamSelection, setShowTeamSelection] = useState(false);
   const [showBidModal, setShowBidModal] = useState(false);
   const [showBookModal, setShowBookModal] = useState(false);
@@ -57,6 +43,100 @@ export default function LiveSpadesScreen() {
   const [tempTargetScore, setTempTargetScore] = useState(500);
   const [permission, requestPermission] = useCameraPermissions();
   const [hasScanned, setHasScanned] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [gameStartTime] = useState(new Date());
+  const [isLoadingTeams, setIsLoadingTeams] = useState(true);
+
+  const fetchTeams = useCallback(async () => {
+    if (!user) {
+      setIsLoadingTeams(false);
+      return;
+    }
+
+    try {
+      // Fetch teams where user is a member
+      const { data: teamMembers, error: teamError } = await supabase
+        .from('team_members')
+        .select(`
+          team_id,
+          teams!inner(id, name)
+        `)
+        .eq('user_id', user.id);
+
+      if (teamError) {
+        console.error('Error fetching teams:', teamError);
+        setIsLoadingTeams(false);
+        return;
+      }
+
+      // Get unique team IDs
+      const uniqueTeamIds = [...new Set(teamMembers?.map((member: any) => member.team_id) || [])];
+
+      // Fetch detailed team info including all members
+      const teamsData: Team[] = [];
+      for (const teamId of uniqueTeamIds) {
+        const { data: teamData, error: teamFetchError } = await supabase
+          .from('teams')
+          .select('id, name')
+          .eq('id', teamId)
+          .single();
+
+        if (teamFetchError || !teamData) {
+          console.error('Error fetching team:', teamFetchError);
+          continue;
+        }
+
+        // Fetch team members
+        const { data: membersData, error: membersError } = await supabase
+          .from('team_members')
+          .select(`
+            slot,
+            profiles(display_name),
+            team_guests(display_name)
+          `)
+          .eq('team_id', teamId)
+          .order('slot', { ascending: true });
+
+        if (membersError) {
+          console.error('Error fetching team members:', membersError);
+        }
+
+        // Format members list
+        const memberNames = membersData?.map((member: any) => {
+          if (member.profiles?.display_name) {
+            return member.profiles.display_name;
+          } else if (member.team_guests?.display_name) {
+            return member.team_guests.display_name;
+          }
+          return null;
+        }).filter((name): name is string => name !== null) || [];
+
+        teamsData.push({
+          id: teamData.id,
+          name: teamData.name,
+          members: memberNames.join(' · '),
+        });
+      }
+
+      setAvailableTeams(teamsData);
+      
+      // Set first team as default if not already selected
+      if (teamsData.length > 0 && !selectedTeam1) {
+        setSelectedTeam1(teamsData[0]);
+      }
+    } catch (error) {
+      console.error('Error fetching teams:', error);
+    } finally {
+      setIsLoadingTeams(false);
+    }
+  }, [user, selectedTeam1]);
+
+  // Fetch teams when component mounts or when coming back to the screen
+  useFocusEffect(
+    useCallback(() => {
+      fetchTeams();
+    }, [fetchTeams])
+  );
 
   const addHand = () => {
     if (waitingForBooks) {
@@ -154,9 +234,132 @@ export default function LiveSpadesScreen() {
     setShowTargetScoreModal(false);
   };
 
-  const finishGame = () => {
-    // This would finish the game and save it
-    console.log('Finish game pressed');
+  const finishGame = async () => {
+    // Validate that we have both teams
+    if (!selectedTeam1) {
+      Alert.alert('Error', 'Please select Team 1 before finishing the game.');
+      return;
+    }
+
+    if (!selectedTeam2) {
+      Alert.alert('Error', 'Please scan Team 2 before finishing the game.');
+      return;
+    }
+
+    // Validate that we have at least one completed hand
+    if (gameHands.length === 0 || gameHands.every(hand => hand.status !== 'completed')) {
+      Alert.alert('Error', 'Please complete at least one hand before finishing the game.');
+      return;
+    }
+
+    // Check if there's a hand waiting for books
+    if (waitingForBooks) {
+      Alert.alert('Error', 'Please complete the current hand before finishing the game.');
+      return;
+    }
+
+    if (!user) {
+      Alert.alert('Error', 'You must be logged in to save a game.');
+      return;
+    }
+
+    setIsSaving(true);
+
+    try {
+      // Determine winner
+      const winnerTeamId = team1Score > team2Score ? selectedTeam1.id : selectedTeam2.id;
+      const completedAt = new Date().toISOString();
+
+      // Insert game record
+      const { data: gameData, error: gameError } = await supabase
+        .from('spades_games')
+        .insert({
+          team1_id: selectedTeam1.id,
+          team2_id: selectedTeam2.id,
+          started_at: gameStartTime.toISOString(),
+          status: 'completed',
+          created_by: user.id,
+        })
+        .select()
+        .single();
+
+      if (gameError) {
+        console.error('Error inserting game:', gameError);
+        Alert.alert('Error', 'Failed to save game. Please try again.');
+        return;
+      }
+
+      const gameId = gameData.id;
+
+      // Insert game outcome
+      const { error: outcomeError } = await supabase
+        .from('spades_game_outcomes')
+        .insert({
+          game_id: gameId,
+          team1_id: selectedTeam1.id,
+          team2_id: selectedTeam2.id,
+          winner_team_id: winnerTeamId,
+          team1_total: team1Score,
+          team2_total: team2Score,
+          completed_at: completedAt,
+        });
+
+      if (outcomeError) {
+        console.error('Error inserting outcome:', outcomeError);
+        Alert.alert('Error', 'Failed to save game outcome. Please try again.');
+        return;
+      }
+
+      // Insert all hands
+      const completedHands = gameHands.filter(hand => hand.status === 'completed');
+      const handsToInsert = completedHands.map((hand, index) => {
+        // Calculate running totals for this hand
+        let team1TotalAfter = 0;
+        let team2TotalAfter = 0;
+        
+        for (let i = 0; i <= index; i++) {
+          team1TotalAfter += completedHands[i].team1Points || 0;
+          team2TotalAfter += completedHands[i].team2Points || 0;
+        }
+
+        return {
+          game_id: gameId,
+          hand_no: index + 1,
+          team1_bid: hand.team1Bid,
+          team2_bid: hand.team2Bid,
+          team1_books: hand.team1Books,
+          team2_books: hand.team2Books,
+          team1_delta: hand.team1Points || 0,
+          team2_delta: hand.team2Points || 0,
+          team1_total_after: team1TotalAfter,
+          team2_total_after: team2TotalAfter,
+        };
+      });
+
+      if (handsToInsert.length > 0) {
+        const { error: handsError } = await supabase
+          .from('spades_hands')
+          .insert(handsToInsert);
+
+        if (handsError) {
+          console.error('Error inserting hands:', handsError);
+          // Don't show error to user since game and outcome were saved
+        }
+      }
+
+      // Success! Navigate back to spades screen
+      Alert.alert('Success', 'Game saved successfully!', [
+        {
+          text: 'OK',
+          onPress: () => router.back(),
+        },
+      ]);
+    } catch (error) {
+      console.error('Unexpected error saving game:', error);
+      Alert.alert('Error', 'An unexpected error occurred. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const scanTeamQR = async () => {
@@ -179,7 +382,7 @@ export default function LiveSpadesScreen() {
     setShowQRScanner(true);
   };
 
-  const fetchTeamFromQRCode = async (data: string): Promise<typeof availableTeams[0] | null> => {
+  const fetchTeamFromQRCode = async (data: string): Promise<Team | null> => {
     try {
       // Try to parse as JSON
       const parsed = JSON.parse(data);
@@ -259,7 +462,7 @@ export default function LiveSpadesScreen() {
     }
   };
 
-  const selectTeam = (team: typeof availableTeams[0]) => {
+  const selectTeam = (team: Team) => {
     setSelectedTeam1(team);
     setShowTeamSelection(false);
   };
@@ -394,13 +597,26 @@ export default function LiveSpadesScreen() {
         {/* Team 1 Section */}
         <View style={styles.section}>
           <ThemedText style={styles.sectionLabel}>TEAM 1</ThemedText>
-          <TouchableOpacity 
-            style={styles.teamCard}
-            onPress={() => setShowTeamSelection(true)}
-          >
-            <ThemedText style={styles.teamName}>{selectedTeam1.name}</ThemedText>
-            <ThemedText style={styles.teamMembers}>{selectedTeam1.members}</ThemedText>
-          </TouchableOpacity>
+          {isLoadingTeams ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="small" color="#EF4444" />
+              <ThemedText style={styles.loadingText}>Loading teams...</ThemedText>
+            </View>
+          ) : selectedTeam1 ? (
+            <TouchableOpacity 
+              style={styles.teamCard}
+              onPress={() => setShowTeamSelection(true)}
+            >
+              <ThemedText style={styles.teamName}>{selectedTeam1.name}</ThemedText>
+              <ThemedText style={styles.teamMembers}>{selectedTeam1.members}</ThemedText>
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.teamCard}>
+              <ThemedText style={styles.teamInstructions}>
+                No teams available. Please create a team first.
+              </ThemedText>
+            </View>
+          )}
         </View>
 
         {/* Team 2 Section */}
@@ -523,8 +739,16 @@ export default function LiveSpadesScreen() {
             </TouchableOpacity>
           </View>
           
-          <TouchableOpacity style={styles.finishButton} onPress={finishGame}>
-            <ThemedText style={styles.finishButtonText}>Finish Game</ThemedText>
+          <TouchableOpacity 
+            style={[styles.finishButton, isSaving && styles.finishButtonDisabled]} 
+            onPress={finishGame}
+            disabled={isSaving}
+          >
+            {isSaving ? (
+              <ActivityIndicator size="small" color="#ECEDEE" />
+            ) : (
+              <ThemedText style={styles.finishButtonText}>Finish Game</ThemedText>
+            )}
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -546,19 +770,19 @@ export default function LiveSpadesScreen() {
                   key={team.id}
                   style={[
                     styles.teamOption,
-                    selectedTeam1.id === team.id && styles.teamOptionSelected
+                    selectedTeam1?.id === team.id && styles.teamOptionSelected
                   ]}
                   onPress={() => selectTeam(team)}
                 >
                   <ThemedText style={[
                     styles.teamOptionName,
-                    selectedTeam1.id === team.id && styles.teamOptionNameSelected
+                    selectedTeam1?.id === team.id && styles.teamOptionNameSelected
                   ]}>
                     {team.name}
                   </ThemedText>
                   <ThemedText style={[
                     styles.teamOptionMembers,
-                    selectedTeam1.id === team.id && styles.teamOptionMembersSelected
+                    selectedTeam1?.id === team.id && styles.teamOptionMembersSelected
                   ]}>
                     {team.members}
                   </ThemedText>
@@ -1067,6 +1291,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     borderRadius: 12,
   },
+  finishButtonDisabled: {
+    opacity: 0.5,
+  },
   finishButtonText: {
     color: '#ECEDEE',
     fontSize: 16,
@@ -1273,5 +1500,16 @@ const styles = StyleSheet.create({
     marginTop: 24,
     textAlign: 'center',
     paddingHorizontal: 40,
+  },
+  loadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 20,
+  },
+  loadingText: {
+    color: '#ECEDEE',
+    fontSize: 14,
+    marginLeft: 8,
   },
 });
