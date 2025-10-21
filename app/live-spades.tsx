@@ -266,8 +266,11 @@ export default function LiveSpadesScreen() {
     setIsSaving(true);
 
     try {
-      // Determine winner
-      const winnerTeamId = team1Score > team2Score ? selectedTeam1.id : selectedTeam2.id;
+      // Determine winner (null on tie)
+      const winnerTeamId: string | null =
+        team1Score === team2Score
+          ? null
+          : (team1Score > team2Score ? selectedTeam1.id : selectedTeam2.id);
       const completedAt = new Date().toISOString();
 
       // Insert game record
@@ -291,7 +294,10 @@ export default function LiveSpadesScreen() {
 
       const gameId = gameData.id;
 
-      // Insert game outcome
+      // Note: Team member snapshot is automatically created by database trigger
+      // (trg_snapshot_game_team_members) when the game is inserted
+
+      // Insert game outcome (this fires stats trigger)
       const { error: outcomeError } = await supabase
         .from('spades_game_outcomes')
         .insert({
