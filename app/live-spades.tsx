@@ -2,8 +2,9 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useState } from 'react';
-import { Modal, ScrollView, StatusBar, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Alert, Modal, ScrollView, StatusBar, StyleSheet, TouchableOpacity, View } from 'react-native';
 
 // Mock data
 const availableTeams = [
@@ -44,6 +45,7 @@ export default function LiveSpadesScreen() {
   const [showBookModal, setShowBookModal] = useState(false);
   const [showUndoModal, setShowUndoModal] = useState(false);
   const [showTargetScoreModal, setShowTargetScoreModal] = useState(false);
+  const [showQRScanner, setShowQRScanner] = useState(false);
   const [team1Bid, setTeam1Bid] = useState(0);
   const [team2Bid, setTeam2Bid] = useState(0);
   const [team1Book, setTeam1Book] = useState(0);
@@ -51,6 +53,8 @@ export default function LiveSpadesScreen() {
   const [waitingForBooks, setWaitingForBooks] = useState(false);
   const [targetScore, setTargetScore] = useState(500);
   const [tempTargetScore, setTempTargetScore] = useState(500);
+  const [permission, requestPermission] = useCameraPermissions();
+  const [hasScanned, setHasScanned] = useState(false);
 
   const addHand = () => {
     if (waitingForBooks) {
@@ -153,9 +157,67 @@ export default function LiveSpadesScreen() {
     console.log('Finish game pressed');
   };
 
-  const scanTeamQR = () => {
-    // This would open QR scanner
-    console.log('Scan team QR pressed');
+  const scanTeamQR = async () => {
+    if (!permission) {
+      // Request permission if we don't have it yet
+      const result = await requestPermission();
+      if (!result.granted) {
+        Alert.alert('Permission Required', 'Camera permission is required to scan QR codes.');
+        return;
+      }
+    } else if (!permission.granted) {
+      const result = await requestPermission();
+      if (!result.granted) {
+        Alert.alert('Permission Required', 'Camera permission is required to scan QR codes.');
+        return;
+      }
+    }
+    
+    setHasScanned(false);
+    setShowQRScanner(true);
+  };
+
+  const validateQRCode = (data: string): boolean => {
+    // For now, we'll check if the QR code contains a team ID
+    // Format: team:{teamId} or just check if it's in our availableTeams
+    try {
+      // Try to parse as JSON first
+      const parsed = JSON.parse(data);
+      if (parsed.type === 'team' && parsed.teamId) {
+        // Check if team exists in our available teams
+        return availableTeams.some(team => team.id === parsed.teamId);
+      }
+    } catch {
+      // If not JSON, check if it matches team:{id} format
+      if (data.startsWith('team:')) {
+        const teamId = data.split(':')[1];
+        return availableTeams.some(team => team.id === teamId);
+      }
+    }
+    return false;
+  };
+
+  const handleBarcodeScanned = ({ data }: { type: string; data: string }) => {
+    if (hasScanned) return;
+    
+    setHasScanned(true);
+    const isValid = validateQRCode(data);
+    
+    if (isValid) {
+      Alert.alert('Valid QR Code', 'This is a valid team QR code!', [
+        {
+          text: 'OK',
+          onPress: () => setShowQRScanner(false),
+        },
+      ]);
+    } else {
+      Alert.alert('Invalid QR Code', 'This QR code is not valid or does not belong to a team.', [
+        {
+          text: 'OK',
+          onPress: () => setShowQRScanner(false),
+        },
+      ]);
+    }
   };
 
   const selectTeam = (team: typeof availableTeams[0]) => {
@@ -680,6 +742,42 @@ export default function LiveSpadesScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* QR Scanner Modal */}
+      <Modal
+        visible={showQRScanner}
+        transparent={false}
+        animationType="slide"
+        onRequestClose={() => setShowQRScanner(false)}
+      >
+        <View style={styles.scannerContainer}>
+          <View style={styles.scannerHeader}>
+            <ThemedText style={styles.scannerTitle}>Scan Team QR Code</ThemedText>
+            <TouchableOpacity
+              style={styles.closeScannerButton}
+              onPress={() => setShowQRScanner(false)}
+            >
+              <ThemedText style={styles.closeScannerButtonText}>✕</ThemedText>
+            </TouchableOpacity>
+          </View>
+          
+          <CameraView
+            style={styles.camera}
+            facing="back"
+            onBarcodeScanned={hasScanned ? undefined : handleBarcodeScanned}
+            barcodeScannerSettings={{
+              barcodeTypes: ['qr'],
+            }}
+          >
+            <View style={styles.scannerOverlay}>
+              <View style={styles.scannerFrame} />
+              <ThemedText style={styles.scannerInstructions}>
+                Position the QR code within the frame
+              </ThemedText>
+            </View>
+          </CameraView>
+        </View>
+      </Modal>
     </ThemedView>
   );
 }
@@ -1063,5 +1161,61 @@ const styles = StyleSheet.create({
   targetScoreSection: {
     alignItems: 'center',
     marginBottom: 24,
+  },
+  // QR Scanner styles
+  scannerContainer: {
+    flex: 1,
+    backgroundColor: '#0A0A0F',
+  },
+  scannerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 60,
+    paddingBottom: 20,
+    backgroundColor: '#0A0A0F',
+  },
+  scannerTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#ECEDEE',
+  },
+  closeScannerButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#1A1A24',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  closeScannerButtonText: {
+    fontSize: 24,
+    color: '#ECEDEE',
+    fontWeight: '600',
+  },
+  camera: {
+    flex: 1,
+  },
+  scannerOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  scannerFrame: {
+    width: 250,
+    height: 250,
+    borderWidth: 3,
+    borderColor: '#EF4444',
+    borderRadius: 12,
+    backgroundColor: 'transparent',
+  },
+  scannerInstructions: {
+    fontSize: 16,
+    color: '#ECEDEE',
+    marginTop: 24,
+    textAlign: 'center',
+    paddingHorizontal: 40,
   },
 });
