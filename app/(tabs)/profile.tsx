@@ -4,6 +4,7 @@ import { Colors } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
+import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Modal, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
@@ -135,7 +136,10 @@ export default function ProfileScreen() {
           <ThemedText style={styles.userDetail}>User ID · {String(user.id)}</ThemedText>
           
           {/* Buttons */}
-          <TouchableOpacity style={[styles.accountButton, { backgroundColor: '#2A2A3A' }]}>
+          <TouchableOpacity 
+            style={[styles.accountButton, { backgroundColor: '#2A2A3A' }]}
+            onPress={() => router.push('/account-management')}
+          >
             <ThemedText style={styles.buttonText}>Manage Account</ThemedText>
           </TouchableOpacity>
           

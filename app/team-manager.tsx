@@ -134,7 +134,7 @@ export default function TeamManagerScreen() {
 
     Alert.alert(
       'Archive Team',
-      'Are you sure you want to archive this team? This action cannot be undone.',
+      'Are you sure you want to archive this team? You can undo this in Account Management.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
