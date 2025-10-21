@@ -4,14 +4,14 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
 import {
-    KeyboardAvoidingView,
-    Platform,
-    SafeAreaView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  KeyboardAvoidingView,
+  Platform,
+  SafeAreaView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 
 export default function SignUpScreen() {
@@ -51,7 +51,7 @@ export default function SignUpScreen() {
   };
 
   const handleGoToSignIn = () => {
-    router.push('/sign-in');
+    router.push('/(auth)/sign-in');
   };
 
   return (

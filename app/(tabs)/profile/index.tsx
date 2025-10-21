@@ -138,7 +138,7 @@ export default function ProfileScreen() {
           {/* Buttons */}
           <TouchableOpacity 
             style={[styles.accountButton, { backgroundColor: '#2A2A3A' }]}
-            onPress={() => router.push('/account-management')}
+            onPress={() => router.push('/(tabs)/profile/account')}
           >
             <ThemedText style={styles.buttonText}>Manage Account</ThemedText>
           </TouchableOpacity>

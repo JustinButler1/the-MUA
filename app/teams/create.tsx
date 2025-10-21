@@ -379,11 +379,13 @@ export default function CreateTeamScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    paddingTop: 30,
   },
   scrollContent: {
     paddingHorizontal: 20,
     paddingBottom: 40,
     paddingTop: 30,
+    flexGrow: 1,
   },
   section: {
     marginBottom: 32,

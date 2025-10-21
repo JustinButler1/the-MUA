@@ -23,14 +23,15 @@ function RootLayoutNav() {
       <Stack>
         {/* Public Routes - Only shown when not authenticated */}
         <Stack.Protected guard={!isSignedIn}>
-          <Stack.Screen name="sign-in" options={{ headerShown: false }} />
-          <Stack.Screen name="sign-up" options={{ headerShown: false }} />
+          <Stack.Screen name="(auth)" options={{ headerShown: false }} />
         </Stack.Protected>
 
         {/* Protected Routes - Only shown when authenticated */}
         <Stack.Protected guard={isSignedIn}>
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
+          <Stack.Screen name="games" options={{ headerShown: false }} />
+          <Stack.Screen name="teams" options={{ headerShown: false }} />
         </Stack.Protected>
       </Stack>
       <StatusBar style="auto" />

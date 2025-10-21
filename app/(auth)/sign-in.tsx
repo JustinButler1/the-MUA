@@ -42,7 +42,7 @@ export default function SignInScreen() {
   };
 
   const handleGoToSignUp = () => {
-    router.push('/sign-up');
+    router.push('/(auth)/sign-up');
   };
 
   return (

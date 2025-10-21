@@ -29,7 +29,7 @@ export default function GamesScreen() {
             title="Spades"
             description="LIVE BIDS, LOGS, AND STATISTICS"
             badgeType="live"
-            onPress={() => router.push('/spades' as any)}
+            onPress={() => router.push('/(tabs)/games/spades')}
           />
           
           <GameCard

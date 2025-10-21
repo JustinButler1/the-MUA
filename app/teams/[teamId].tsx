@@ -291,6 +291,7 @@ export default function TeamManagerScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    paddingTop: 30,
   },
   header: {
     flexDirection: 'row',
@@ -323,6 +324,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 40,
     paddingTop: 30,
+    flexGrow: 1,
   },
   section: {
     marginBottom: 32,

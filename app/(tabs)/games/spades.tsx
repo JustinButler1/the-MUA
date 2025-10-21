@@ -224,7 +224,7 @@ export default function SpadesScreen() {
         {/* Create Team Button */}
         <TouchableOpacity 
           style={styles.createTeamButton}
-          onPress={() => router.push('/create-team' as any)}
+          onPress={() => router.push('/teams/create' as any)}
         >
           <ThemedText style={styles.createTeamButtonText}>Create Team</ThemedText>
         </TouchableOpacity>
@@ -244,7 +244,7 @@ export default function SpadesScreen() {
               <TouchableOpacity 
                 key={team.id} 
                 style={styles.teamCard}
-                onPress={() => router.push({ pathname: '/team-manager', params: { teamId: team.id } } as any)}
+                onPress={() => router.push({ pathname: '/teams/[teamId]', params: { teamId: team.id } } as any)}
               >
                 <ThemedText style={styles.teamName}>{team.name}</ThemedText>
                 <ThemedText style={styles.teamMembers}>{team.members}</ThemedText>
@@ -267,7 +267,7 @@ export default function SpadesScreen() {
               <TouchableOpacity 
                 key={game.id} 
                 style={styles.gameCard}
-                onPress={() => router.push({ pathname: '/game-details', params: { gameId: game.id } } as any)}
+                onPress={() => router.push({ pathname: '/games/[gameId]', params: { gameId: game.id } } as any)}
               >
                 <View style={styles.gameHeader}>
                   <View style={styles.teamPill}>
@@ -301,7 +301,7 @@ export default function SpadesScreen() {
       {/* Add Spades Game Button */}
       <TouchableOpacity 
         style={styles.addGameButton}
-        onPress={() => router.push('/live-spades' as any)}
+        onPress={() => router.push('/games/live' as any)}
       >
         <ThemedText style={styles.addGameButtonText}>Add Spades Game</ThemedText>
       </TouchableOpacity>
@@ -312,6 +312,7 @@ export default function SpadesScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    paddingTop: 30,
   },
   headerTitle: {
     color: '#ECEDEE',
