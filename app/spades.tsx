@@ -244,7 +244,7 @@ export default function SpadesScreen() {
               <TouchableOpacity 
                 key={team.id} 
                 style={styles.teamCard}
-                onPress={() => router.push('/team-manager' as any)}
+                onPress={() => router.push({ pathname: '/team-manager', params: { teamId: team.id } } as any)}
               >
                 <ThemedText style={styles.teamName}>{team.name}</ThemedText>
                 <ThemedText style={styles.teamMembers}>{team.members}</ThemedText>

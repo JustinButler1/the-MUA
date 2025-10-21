@@ -1,31 +1,191 @@
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Colors } from '@/constants/theme';
+import { useAuth } from '@/contexts/AuthContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { useState } from 'react';
-import { ScrollView, StatusBar, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
+import { supabase } from '@/lib/supabase';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, ScrollView, StatusBar, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 
-// Mock data for team
-const mockTeam = {
-  id: '1',
-  name: 'yes team test team',
-  members: [
-    {
-      id: '1',
-      name: 'Test',
-      type: 'REGISTERED USER',
-    },
-    {
-      id: '2',
-      name: 'guestalex',
-      type: 'GUEST PLAYER',
-    },
-  ],
-};
+// Types for team data
+interface TeamMember {
+  id: string;
+  name: string;
+  type: 'REGISTERED USER' | 'GUEST PLAYER';
+}
+
+interface Team {
+  id: string;
+  name: string;
+  members: TeamMember[];
+}
 
 export default function TeamManagerScreen() {
   const colorScheme = useColorScheme();
-  const [teamName, setTeamName] = useState(mockTeam.name);
+  const { user } = useAuth();
+  const { teamId } = useLocalSearchParams<{ teamId: string }>();
+  const [team, setTeam] = useState<Team | null>(null);
+  const [teamName, setTeamName] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchTeamData = async () => {
+      if (!teamId || !user) {
+        Alert.alert('Error', 'No team ID provided');
+        router.back();
+        return;
+      }
+
+      try {
+        // Fetch team data
+        const { data: teamData, error: teamError } = await supabase
+          .from('teams')
+          .select('id, name')
+          .eq('id', teamId)
+          .single();
+
+        if (teamError) {
+          console.error('Error fetching team:', teamError);
+          Alert.alert('Error', 'Failed to load team data');
+          return;
+        }
+
+        // Fetch team members
+        const { data: membersData, error: membersError } = await supabase
+          .from('team_members')
+          .select(`
+            slot,
+            profiles(display_name),
+            team_guests(display_name)
+          `)
+          .eq('team_id', teamId)
+          .order('slot', { ascending: true });
+
+        if (membersError) {
+          console.error('Error fetching team members:', membersError);
+          Alert.alert('Error', 'Failed to load team members');
+          return;
+        }
+
+        // Process members data
+        const members: TeamMember[] = membersData?.map((member: any) => {
+          if (member.profiles?.display_name) {
+            return {
+              id: `user-${member.slot}`,
+              name: member.profiles.display_name,
+              type: 'REGISTERED USER' as const
+            };
+          } else if (member.team_guests?.display_name) {
+            return {
+              id: `guest-${member.slot}`,
+              name: member.team_guests.display_name,
+              type: 'GUEST PLAYER' as const
+            };
+          }
+          return null;
+        }).filter((member): member is TeamMember => member !== null) || [];
+
+        const teamInfo: Team = {
+          id: teamData.id,
+          name: teamData.name,
+          members
+        };
+
+        setTeam(teamInfo);
+        setTeamName(teamData.name);
+      } catch (error) {
+        console.error('Error fetching team data:', error);
+        Alert.alert('Error', 'Failed to load team data');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchTeamData();
+  }, [teamId, user]);
+
+  const handleSaveChanges = async () => {
+    if (!team || !teamId) return;
+
+    try {
+      const { error } = await supabase
+        .from('teams')
+        .update({ name: teamName.trim() })
+        .eq('id', teamId);
+
+      if (error) {
+        console.error('Error updating team:', error);
+        Alert.alert('Error', 'Failed to save changes');
+        return;
+      }
+
+      Alert.alert('Success', 'Team updated successfully!');
+    } catch (error) {
+      console.error('Error saving team:', error);
+      Alert.alert('Error', 'Failed to save changes');
+    }
+  };
+
+  const handleArchiveTeam = async () => {
+    if (!team || !teamId) return;
+
+    Alert.alert(
+      'Archive Team',
+      'Are you sure you want to archive this team? This action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Archive',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { error } = await supabase
+                .from('teams')
+                .update({ archived: true })
+                .eq('id', teamId);
+
+              if (error) {
+                console.error('Error archiving team:', error);
+                Alert.alert('Error', 'Failed to archive team');
+                return;
+              }
+
+              Alert.alert('Success', 'Team archived successfully!', [
+                { text: 'OK', onPress: () => router.back() }
+              ]);
+            } catch (error) {
+              console.error('Error archiving team:', error);
+              Alert.alert('Error', 'Failed to archive team');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  if (isLoading) {
+    return (
+      <ThemedView style={[styles.container, { backgroundColor: Colors[colorScheme ?? 'dark'].background }]}>
+        <StatusBar barStyle="light-content" backgroundColor="#0A0A0F" />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#EF4444" />
+          <ThemedText style={styles.loadingText}>Loading team data...</ThemedText>
+        </View>
+      </ThemedView>
+    );
+  }
+
+  if (!team) {
+    return (
+      <ThemedView style={[styles.container, { backgroundColor: Colors[colorScheme ?? 'dark'].background }]}>
+        <StatusBar barStyle="light-content" backgroundColor="#0A0A0F" />
+        <View style={styles.loadingContainer}>
+          <ThemedText style={styles.errorText}>Team not found</ThemedText>
+        </View>
+      </ThemedView>
+    );
+  }
 
   return (
     <ThemedView style={[styles.container, { backgroundColor: Colors[colorScheme ?? 'dark'].background }]}>
@@ -47,7 +207,7 @@ export default function TeamManagerScreen() {
         {/* Roster Section */}
         <View style={styles.section}>
           <ThemedText style={styles.sectionLabel}>ROSTER</ThemedText>
-          {mockTeam.members.map((member) => (
+          {team.members.map((member) => (
             <View key={member.id} style={styles.memberCard}>
               <View style={styles.memberInfo}>
                 <ThemedText style={styles.memberName}>{member.name}</ThemedText>
@@ -68,11 +228,11 @@ export default function TeamManagerScreen() {
             <ThemedText style={styles.buttonText}>Show Team QR</ThemedText>
           </TouchableOpacity>
           
-          <TouchableOpacity style={styles.secondaryButton}>
+          <TouchableOpacity style={styles.secondaryButton} onPress={handleSaveChanges}>
             <ThemedText style={styles.buttonText}>Save Changes</ThemedText>
           </TouchableOpacity>
           
-          <TouchableOpacity style={styles.dangerButton}>
+          <TouchableOpacity style={styles.dangerButton} onPress={handleArchiveTeam}>
             <ThemedText style={styles.buttonText}>Archive Team</ThemedText>
           </TouchableOpacity>
         </View>
@@ -196,6 +356,22 @@ const styles = StyleSheet.create({
     color: '#ECEDEE',
     fontSize: 16,
     fontWeight: '600',
+    textAlign: 'center',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  loadingText: {
+    color: '#ECEDEE',
+    fontSize: 16,
+    marginTop: 16,
+  },
+  errorText: {
+    color: '#EF4444',
+    fontSize: 16,
     textAlign: 'center',
   },
 });
