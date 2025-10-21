@@ -8,48 +8,31 @@ import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StatusBar, StyleSheet, TouchableOpacity, View } from 'react-native';
 
-// Types for team data
+// Types for team and game data
 interface Team {
   id: string;
   name: string;
   members: string;
 }
 
-const mockGames = [
-  {
-    id: '1',
-    team1: 'team1',
-    team2: 'yes team test team',
-    score1: 130,
-    score2: -40,
-    winner: 'team1',
-    date: 'Oct 6, 2025',
-  },
-  {
-    id: '2',
-    team1: 'post teampage',
-    team2: 'yes team test team',
-    score1: 130,
-    score2: -40,
-    winner: 'post teampage',
-    date: 'Oct 6, 2025',
-  },
-  {
-    id: '3',
-    team1: 'post teampage',
-    team2: 'scan team',
-    score1: 120,
-    score2: 97,
-    winner: 'post teampage',
-    date: 'Oct 6, 2025',
-  },
-];
+interface Game {
+  id: string;
+  team1: string;
+  team2: string;
+  score1: number;
+  score2: number;
+  winner: string;
+  date: string;
+}
+
 
 export default function SpadesScreen() {
   const colorScheme = useColorScheme();
   const { user } = useAuth();
   const [teams, setTeams] = useState<Team[]>([]);
+  const [games, setGames] = useState<Game[]>([]);
   const [isLoadingTeams, setIsLoadingTeams] = useState(true);
+  const [isLoadingGames, setIsLoadingGames] = useState(true);
 
   const fetchTeams = useCallback(async () => {
     if (!user) {
@@ -104,15 +87,120 @@ export default function SpadesScreen() {
     }
   }, [user]);
 
+  const fetchGames = useCallback(async () => {
+    if (!user) {
+      setIsLoadingGames(false);
+      return;
+    }
+
+    try {
+      // First get team IDs where user is a member
+      const { data: teamMembers, error: teamError } = await supabase
+        .from('team_members')
+        .select('team_id')
+        .eq('user_id', user.id);
+
+      if (teamError) {
+        console.error('Error fetching user teams for games:', teamError);
+        Alert.alert('Error', 'Failed to load games');
+        return;
+      }
+
+      const teamIds = teamMembers?.map((member: any) => member.team_id) || [];
+
+      if (teamIds.length === 0) {
+        setGames([]);
+        setIsLoadingGames(false);
+        return;
+      }
+
+      // Fetch games where user participated
+      const { data: gamesData, error: gamesError } = await supabase
+        .from('spades_games')
+        .select(`
+          id,
+          team1_id,
+          team2_id,
+          started_at,
+          team1:teams!team1_id(name),
+          team2:teams!team2_id(name)
+        `)
+        .or(`team1_id.in.(${teamIds.join(',')}),team2_id.in.(${teamIds.join(',')})`)
+        .eq('status', 'completed')
+        .order('started_at', { ascending: false });
+
+      if (gamesError) {
+        console.error('Error fetching games:', gamesError);
+        Alert.alert('Error', 'Failed to load games');
+        return;
+      }
+
+      // Get game IDs to fetch outcomes
+      const gameIds = gamesData?.map((game: any) => game.id) || [];
+      
+      // Fetch outcomes for these games
+      let outcomes: any[] = [];
+      if (gameIds.length > 0) {
+        const { data: outcomesData, error: outcomesError } = await supabase
+          .from('spades_game_outcomes')
+          .select('*')
+          .in('game_id', gameIds);
+        
+        if (outcomesError) {
+          console.error('Error fetching outcomes:', outcomesError);
+          // Continue without outcomes data
+        } else {
+          outcomes = outcomesData || [];
+        }
+      }
+
+      // Process game data
+      const processedGames: Game[] = gamesData?.map((game: any) => {
+        const outcome = outcomes.find((o: any) => o.game_id === game.id);
+        const team1Name = (game.team1 as any)?.name || 'Unknown Team';
+        const team2Name = (game.team2 as any)?.name || 'Unknown Team';
+        const winnerTeamId = outcome?.winner_team_id;
+        const winner = winnerTeamId === game.team1_id ? team1Name : team2Name;
+        
+        const date = outcome?.completed_at 
+          ? new Date(outcome.completed_at).toLocaleDateString('en-US', { 
+              month: 'short', 
+              day: 'numeric', 
+              year: 'numeric' 
+            })
+          : 'Unknown Date';
+
+        return {
+          id: game.id,
+          team1: team1Name,
+          team2: team2Name,
+          score1: outcome?.team1_total || 0,
+          score2: outcome?.team2_total || 0,
+          winner,
+          date
+        };
+      }) || [];
+
+      setGames(processedGames);
+    } catch (error) {
+      console.error('Error fetching games:', error);
+      Alert.alert('Error', 'Failed to load games');
+    } finally {
+      setIsLoadingGames(false);
+    }
+  }, [user]);
+
   useEffect(() => {
     fetchTeams();
-  }, [fetchTeams]);
+    fetchGames();
+  }, [fetchTeams, fetchGames]);
 
-  // Refresh teams when screen comes into focus (e.g., returning from create-team)
+  // Refresh data when screen comes into focus (e.g., returning from create-team)
   useFocusEffect(
     useCallback(() => {
       fetchTeams();
-    }, [fetchTeams])
+      fetchGames();
+    }, [fetchTeams, fetchGames])
   );
 
   return (
@@ -167,37 +255,46 @@ export default function SpadesScreen() {
 
         {/* Game History */}
         <View style={styles.section}>
-          {mockGames.map((game) => (
-            <TouchableOpacity 
-              key={game.id} 
-              style={styles.gameCard}
-              onPress={() => router.push('/game-details' as any)}
-            >
-              <View style={styles.gameHeader}>
-                <View style={styles.teamPill}>
-                  <ThemedText style={styles.teamPillText}>{game.team1}</ThemedText>
-                </View>
-                <ThemedText style={styles.vsText}>VS</ThemedText>
-                <View style={styles.teamPill}>
-                  <ThemedText style={styles.teamPillText}>{game.team2}</ThemedText>
-                </View>
-              </View>
-              
-              <View style={styles.scoreContainer}>
-                <View style={styles.scoreItem}>
-                  <ThemedText style={styles.scoreText}>{game.score1}</ThemedText>
-                  <ThemedText style={styles.playedText}>PLAYED</ThemedText>
-                  <ThemedText style={styles.dateText}>{game.date}</ThemedText>
-                </View>
-                <View style={styles.scoreItem}>
-                  <ThemedText style={styles.scoreText}>{game.score2}</ThemedText>
-                  <View style={styles.winnerBadge}>
-                    <ThemedText style={styles.winnerText}>Winner • {game.winner}</ThemedText>
+          {isLoadingGames ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="small" color="#EF4444" />
+              <ThemedText style={styles.loadingText}>Loading games...</ThemedText>
+            </View>
+          ) : games.length === 0 ? (
+            <ThemedText style={styles.emptyText}>No games yet. Start your first game!</ThemedText>
+          ) : (
+            games.map((game) => (
+              <TouchableOpacity 
+                key={game.id} 
+                style={styles.gameCard}
+                onPress={() => router.push({ pathname: '/game-details', params: { gameId: game.id } } as any)}
+              >
+                <View style={styles.gameHeader}>
+                  <View style={styles.teamPill}>
+                    <ThemedText style={styles.teamPillText}>{game.team1}</ThemedText>
+                  </View>
+                  <ThemedText style={styles.vsText}>VS</ThemedText>
+                  <View style={styles.teamPill}>
+                    <ThemedText style={styles.teamPillText}>{game.team2}</ThemedText>
                   </View>
                 </View>
-              </View>
-            </TouchableOpacity>
-          ))}
+                
+                <View style={styles.scoreContainer}>
+                  <View style={styles.scoreItem}>
+                    <ThemedText style={styles.scoreText}>{game.score1}</ThemedText>
+                    <ThemedText style={styles.playedText}>PLAYED</ThemedText>
+                    <ThemedText style={styles.dateText}>{game.date}</ThemedText>
+                  </View>
+                  <View style={styles.scoreItem}>
+                    <ThemedText style={styles.scoreText}>{game.score2}</ThemedText>
+                    <View style={styles.winnerBadge}>
+                      <ThemedText style={styles.winnerText}>Winner • {game.winner}</ThemedText>
+                    </View>
+                  </View>
+                </View>
+              </TouchableOpacity>
+            ))
+          )}
         </View>
       </ScrollView>
 
