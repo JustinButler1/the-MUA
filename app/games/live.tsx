@@ -1405,6 +1405,7 @@ const styles = StyleSheet.create({
     color: '#ECEDEE',
     minWidth: 80,
     textAlign: 'center',
+    lineHeight: 48,
   },
   bidModalActions: {
     flexDirection: 'row',
