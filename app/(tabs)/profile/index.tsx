@@ -127,14 +127,6 @@ export default function ProfileScreen() {
             {profile?.display_name || user.email?.split('@')[0] || 'User'}
           </ThemedText>
           
-          {/* Email */}
-          {user.email && (
-            <ThemedText style={styles.userDetail}>Email · {user.email}</ThemedText>
-          )}
-          
-          {/* User ID */}
-          <ThemedText style={styles.userDetail}>User ID · {String(user.id)}</ThemedText>
-          
           {/* Buttons */}
           <TouchableOpacity 
             style={[styles.accountButton, { backgroundColor: '#2A2A3A' }]}
@@ -257,6 +249,9 @@ const styles = StyleSheet.create({
     fontSize: 32,
     fontWeight: 'bold',
     color: '#ECEDEE',
+    lineHeight: 32,
+    textAlign: 'center',
+    justifyContent: 'center',
   },
   userName: {
     fontSize: 24,

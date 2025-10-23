@@ -218,7 +218,6 @@ export default function CreateTeamScreen() {
           <ThemedText style={styles.sectionLabel}>Player 1 (You)</ThemedText>
           <View style={styles.playerInfoCard}>
             <ThemedText style={styles.playerName}>{user?.user_metadata?.display_name || 'You'}</ThemedText>
-            <ThemedText style={styles.playerId}>{user?.id || 'Loading...'}</ThemedText>
           </View>
         </View>
 
