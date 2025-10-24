@@ -51,12 +51,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-    return { error };
+  const signIn = async (emailOrUsername: string, password: string) => {
+    try {
+      let email = emailOrUsername;
+      
+      // If it doesn't contain '@', treat it as a username and look up the email
+      if (!emailOrUsername.includes('@')) {
+        // Use RPC to get email from username
+        const { data, error } = await supabase.rpc('get_email_from_username', {
+          username_input: emailOrUsername
+        });
+        
+        if (error || !data) {
+          return { error: { message: 'Invalid username or password' } };
+        }
+        
+        email = data;
+      }
+      
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      return { error };
+    } catch (error) {
+      console.error('Sign in error:', error);
+      return { error };
+    }
   };
 
   const signUp = async (email: string, password: string, displayName: string) => {

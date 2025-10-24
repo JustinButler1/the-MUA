@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 
 export default function SignInScreen() {
-  const [email, setEmail] = useState('');
+  const [emailOrUsername, setEmailOrUsername] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
@@ -25,7 +25,7 @@ export default function SignInScreen() {
   const { signIn, signInWithGoogle } = useAuth();
 
   const handleSignIn = async () => {
-    if (!email || !password) {
+    if (!emailOrUsername || !password) {
       setError('Please fill in all fields');
       return;
     }
@@ -33,7 +33,7 @@ export default function SignInScreen() {
     setIsLoading(true);
     setError(null);
 
-    const { error } = await signIn(email, password);
+    const { error } = await signIn(emailOrUsername, password);
     
     if (error) {
       setError(error.message);
@@ -84,19 +84,19 @@ export default function SignInScreen() {
             </View>
           )}
 
-          {/* Email Input */}
+          {/* Email or Username Input */}
           <View style={styles.inputContainer}>
-            <Text style={[styles.inputLabel, { color: colors.text }]}>Email</Text>
+            <Text style={[styles.inputLabel, { color: colors.text }]}>Email or Username</Text>
             <TextInput
               style={[styles.input, { 
                 backgroundColor: colors.background === '#fff' ? '#e5e5e5' : '#2a2a2f',
                 color: colors.text 
               }]}
-              placeholder="you@example.com"
+              placeholder="you@example.com or username"
               placeholderTextColor={colors.icon}
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
+              value={emailOrUsername}
+              onChangeText={setEmailOrUsername}
+              keyboardType="default"
               autoCapitalize="none"
               autoCorrect={false}
             />
