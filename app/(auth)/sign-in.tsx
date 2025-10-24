@@ -18,10 +18,11 @@ export default function SignInScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'dark'];
-  const { signIn } = useAuth();
+  const { signIn, signInWithGoogle } = useAuth();
 
   const handleSignIn = async () => {
     if (!email || !password) {
@@ -39,6 +40,19 @@ export default function SignInScreen() {
     }
     
     setIsLoading(false);
+  };
+
+  const handleGoogleSignIn = async () => {
+    setIsGoogleLoading(true);
+    setError(null);
+
+    const { error } = await signInWithGoogle();
+    
+    if (error) {
+      setError(error.message);
+    }
+    
+    setIsGoogleLoading(false);
   };
 
   const handleGoToSignUp = () => {
@@ -116,10 +130,36 @@ export default function SignInScreen() {
               }
             ]}
             onPress={handleSignIn}
-            disabled={isLoading}
+            disabled={isLoading || isGoogleLoading}
           >
             <Text style={styles.signInButtonText}>
               {isLoading ? 'Signing In...' : 'Sign In'}
+            </Text>
+          </TouchableOpacity>
+
+          {/* Divider */}
+          <View style={styles.dividerContainer}>
+            <View style={[styles.divider, { backgroundColor: colors.icon }]} />
+            <Text style={[styles.dividerText, { color: colors.icon }]}>OR</Text>
+            <View style={[styles.divider, { backgroundColor: colors.icon }]} />
+          </View>
+
+          {/* Google Sign In Button */}
+          <TouchableOpacity 
+            style={[
+              styles.googleButton, 
+              { 
+                backgroundColor: colors.background === '#fff' ? '#fff' : '#2a2a2f',
+                borderWidth: 1,
+                borderColor: colors.icon,
+                opacity: isGoogleLoading ? 0.7 : 1
+              }
+            ]}
+            onPress={handleGoogleSignIn}
+            disabled={isLoading || isGoogleLoading}
+          >
+            <Text style={[styles.googleButtonText, { color: colors.text }]}>
+              {isGoogleLoading ? 'Signing in with Google...' : '🔍 Continue with Google'}
             </Text>
           </TouchableOpacity>
 
@@ -224,5 +264,32 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 14,
     textAlign: 'center',
+  },
+  dividerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 20,
+  },
+  divider: {
+    flex: 1,
+    height: 1,
+    opacity: 0.3,
+  },
+  dividerText: {
+    marginHorizontal: 12,
+    fontSize: 14,
+    fontWeight: '500',
+    opacity: 0.6,
+  },
+  googleButton: {
+    height: 50,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  googleButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

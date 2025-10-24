@@ -1,5 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
+import * as WebBrowser from 'expo-web-browser';
+
+// Important for OAuth flow completion on web
+WebBrowser.maybeCompleteAuthSession();
 
 // Get Supabase credentials from environment variables
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || 'YOUR_SUPABASE_URL';
@@ -17,6 +21,6 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     storage: AsyncStorage,
     autoRefreshToken: true,
     persistSession: true,
-    detectSessionInUrl: false,
+    detectSessionInUrl: true, // Enable for OAuth redirect handling
   },
 });

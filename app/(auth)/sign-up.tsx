@@ -21,6 +21,7 @@ export default function SignUpScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [usernameError, setUsernameError] = useState<string | null>(null);
@@ -28,7 +29,7 @@ export default function SignUpScreen() {
   const [usernameValid, setUsernameValid] = useState(false);
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'dark'];
-  const { signUp } = useAuth();
+  const { signUp, signInWithGoogle } = useAuth();
 
   // Debounced username validation
   useEffect(() => {
@@ -98,6 +99,19 @@ export default function SignUpScreen() {
     }
     
     setIsLoading(false);
+  };
+
+  const handleGoogleSignIn = async () => {
+    setIsGoogleLoading(true);
+    setError(null);
+
+    const { error } = await signInWithGoogle();
+    
+    if (error) {
+      setError(error.message);
+    }
+    
+    setIsGoogleLoading(false);
   };
 
   const handleGoToSignIn = () => {
@@ -224,10 +238,36 @@ export default function SignUpScreen() {
               }
             ]}
             onPress={handleSignUp}
-            disabled={isLoading}
+            disabled={isLoading || isGoogleLoading}
           >
             <Text style={styles.signUpButtonText}>
               {isLoading ? 'Creating Account...' : 'Sign Up'}
+            </Text>
+          </TouchableOpacity>
+
+          {/* Divider */}
+          <View style={styles.dividerContainer}>
+            <View style={[styles.divider, { backgroundColor: colors.icon }]} />
+            <Text style={[styles.dividerText, { color: colors.icon }]}>OR</Text>
+            <View style={[styles.divider, { backgroundColor: colors.icon }]} />
+          </View>
+
+          {/* Google Sign Up Button */}
+          <TouchableOpacity 
+            style={[
+              styles.googleButton, 
+              { 
+                backgroundColor: colors.background === '#fff' ? '#fff' : '#2a2a2f',
+                borderWidth: 1,
+                borderColor: colors.icon,
+                opacity: isGoogleLoading ? 0.7 : 1
+              }
+            ]}
+            onPress={handleGoogleSignIn}
+            disabled={isLoading || isGoogleLoading}
+          >
+            <Text style={[styles.googleButtonText, { color: colors.text }]}>
+              {isGoogleLoading ? 'Signing up with Google...' : '🔍 Continue with Google'}
             </Text>
           </TouchableOpacity>
 
@@ -364,5 +404,32 @@ const styles = StyleSheet.create({
   inputHint: {
     fontSize: 12,
     marginTop: 4,
+  },
+  dividerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 20,
+  },
+  divider: {
+    flex: 1,
+    height: 1,
+    opacity: 0.3,
+  },
+  dividerText: {
+    marginHorizontal: 12,
+    fontSize: 14,
+    fontWeight: '500',
+    opacity: 0.6,
+  },
+  googleButton: {
+    height: 50,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  googleButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
