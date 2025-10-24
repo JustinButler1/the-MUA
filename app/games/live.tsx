@@ -34,8 +34,8 @@ export default function LiveSpadesScreen() {
   const [showUndoModal, setShowUndoModal] = useState(false);
   const [showTargetScoreModal, setShowTargetScoreModal] = useState(false);
   const [showQRScanner, setShowQRScanner] = useState(false);
-  const [team1Bid, setTeam1Bid] = useState(0);
-  const [team2Bid, setTeam2Bid] = useState(0);
+  const [team1Bid, setTeam1Bid] = useState(4);
+  const [team2Bid, setTeam2Bid] = useState(4);
   const [team1BlindBid, setTeam1BlindBid] = useState(false);
   const [team2BlindBid, setTeam2BlindBid] = useState(false);
   const [team1Book, setTeam1Book] = useState(0);
@@ -577,6 +577,17 @@ export default function LiveSpadesScreen() {
     
     // Calculate scores for each team
     const calculateScore = (bid: number, books: number, isBlind: boolean) => {
+      // Special case: Bid of 0
+      if (bid === 0) {
+        if (books === 0) {
+          // Made 0 bid: 100 points (or 200 if blind)
+          return isBlind ? 200 : 100;
+        } else {
+          // Failed 0 bid: lose 100 points (or 200 if blind)
+          return isBlind ? -200 : -100;
+        }
+      }
+      
       if (isBlind) {
         // Blind bid: must get EXACTLY the bid amount
         if (books === bid) {
@@ -616,6 +627,8 @@ export default function LiveSpadesScreen() {
     setTeam1Score(prevScore => prevScore + team1Points);
     setTeam2Score(prevScore => prevScore + team2Points);
     setWaitingForBooks(false);
+    setTeam1Bid(4);
+    setTeam2Bid(4);
     setTeam1Book(0);
     setTeam2Book(0);
     setShowBookModal(false);
