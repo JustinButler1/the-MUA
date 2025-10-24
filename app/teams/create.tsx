@@ -6,7 +6,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Modal, ScrollView, StatusBar, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 
 interface ScannedPartner {
@@ -24,6 +24,9 @@ export default function CreateTeamScreen() {
   const [showScanner, setShowScanner] = useState(false);
   const [scannedPartner, setScannedPartner] = useState<ScannedPartner | null>(null);
   const [permission, requestPermission] = useCameraPermissions();
+  const [hasScanned, setHasScanned] = useState(false);
+  const scanningRef = useRef(false);
+  const lastScanTimeRef = useRef(0);
 
   const handleScanQR = async () => {
     if (!permission || !permission.granted) {
@@ -34,16 +37,33 @@ export default function CreateTeamScreen() {
       }
     }
     
+    setHasScanned(false);
+    scanningRef.current = false;
+    lastScanTimeRef.current = 0;
     setShowScanner(true);
   };
 
   const handleQRScanned = async (data: string) => {
+    // Immediate synchronous check to prevent concurrent scans
+    if (scanningRef.current) return;
+    
+    // Debounce: require at least 2 seconds between scans
+    const now = Date.now();
+    if (now - lastScanTimeRef.current < 2000) return;
+    
+    // Mark as scanning immediately (synchronous)
+    scanningRef.current = true;
+    lastScanTimeRef.current = now;
+    setHasScanned(true);
+    
     try {
       const qrData = JSON.parse(data);
       
       // Check if it's a profile QR code
       if (qrData.type !== 'profile') {
         Alert.alert('Invalid QR Code', 'Please scan a profile QR code');
+        scanningRef.current = false;
+        setHasScanned(false);
         return;
       }
 
@@ -58,6 +78,8 @@ export default function CreateTeamScreen() {
 
       if (error || !profileData) {
         Alert.alert('Error', 'Could not find user profile');
+        scanningRef.current = false;
+        setHasScanned(false);
         return;
       }
 
@@ -72,6 +94,8 @@ export default function CreateTeamScreen() {
     } catch (error) {
       console.error('Error processing QR code:', error);
       Alert.alert('Error', 'Invalid QR code format');
+      scanningRef.current = false;
+      setHasScanned(false);
     }
   };
 
@@ -353,7 +377,7 @@ export default function CreateTeamScreen() {
           <CameraView
             style={styles.camera}
             facing="back"
-            onBarcodeScanned={({ data }) => {
+            onBarcodeScanned={hasScanned ? undefined : ({ data }) => {
               if (data) {
                 handleQRScanned(data);
               }

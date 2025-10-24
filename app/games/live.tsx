@@ -6,7 +6,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Modal, ScrollView, StatusBar, StyleSheet, TouchableOpacity, View } from 'react-native';
 
 interface Team {
@@ -44,6 +44,8 @@ export default function LiveSpadesScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const [hasScanned, setHasScanned] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const scanningRef = useRef(false);
+  const lastScanTimeRef = useRef(0);
   const [gameStartTime] = useState(new Date());
   const [isLoadingTeams, setIsLoadingTeams] = useState(true);
 
@@ -386,6 +388,8 @@ export default function LiveSpadesScreen() {
     }
     
     setHasScanned(false);
+    scanningRef.current = false;
+    lastScanTimeRef.current = 0;
     setShowQRScanner(true);
   };
 
@@ -444,8 +448,16 @@ export default function LiveSpadesScreen() {
   };
 
   const handleBarcodeScanned = async ({ data }: { type: string; data: string }) => {
-    if (hasScanned) return;
+    // Immediate synchronous check to prevent concurrent scans
+    if (scanningRef.current) return;
     
+    // Debounce: require at least 2 seconds between scans
+    const now = Date.now();
+    if (now - lastScanTimeRef.current < 2000) return;
+    
+    // Mark as scanning immediately (synchronous)
+    scanningRef.current = true;
+    lastScanTimeRef.current = now;
     setHasScanned(true);
     
     // Show loading state
