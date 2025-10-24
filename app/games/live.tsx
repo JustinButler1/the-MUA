@@ -7,7 +7,7 @@ import { supabase } from '@/lib/supabase';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Modal, ScrollView, StatusBar, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Modal, ScrollView, StatusBar, StyleSheet, Switch, TouchableOpacity, View } from 'react-native';
 
 interface Team {
   id: string;
@@ -36,6 +36,8 @@ export default function LiveSpadesScreen() {
   const [showQRScanner, setShowQRScanner] = useState(false);
   const [team1Bid, setTeam1Bid] = useState(0);
   const [team2Bid, setTeam2Bid] = useState(0);
+  const [team1BlindBid, setTeam1BlindBid] = useState(false);
+  const [team2BlindBid, setTeam2BlindBid] = useState(false);
   const [team1Book, setTeam1Book] = useState(0);
   const [team2Book, setTeam2Book] = useState(0);
   const [waitingForBooks, setWaitingForBooks] = useState(false);
@@ -552,6 +554,8 @@ export default function LiveSpadesScreen() {
       id: Date.now(),
       team1Bid,
       team2Bid,
+      team1BlindBid,
+      team2BlindBid,
       team1Books: null,
       team2Books: null,
       status: 'waiting_for_books'
@@ -560,6 +564,9 @@ export default function LiveSpadesScreen() {
     setGameHands([...gameHands, newHand]);
     setWaitingForBooks(true);
     setShowBidModal(false);
+    // Reset blind bid states for next hand
+    setTeam1BlindBid(false);
+    setTeam2BlindBid(false);
   };
 
   const saveBook = () => {
@@ -569,20 +576,32 @@ export default function LiveSpadesScreen() {
     const lastHand = updatedHands[lastHandIndex];
     
     // Calculate scores for each team
-    const calculateScore = (bid: number, books: number) => {
-      if (books >= bid) {
-        // Made the bid: 10 points per bid + 1 point per overtrick (bag)
-        const bidPoints = bid * 10;
-        const bags = books - bid;
-        return bidPoints + bags;
+    const calculateScore = (bid: number, books: number, isBlind: boolean) => {
+      if (isBlind) {
+        // Blind bid: must get EXACTLY the bid amount
+        if (books === bid) {
+          // Success: 2x the normal bid points
+          return bid * 10 * 2;
+        } else {
+          // Failure: lose 2x the bid points
+          return bid * -10 * 2;
+        }
       } else {
-        // Failed to make bid: lose 10 points per bid
-        return bid * -10;
+        // Regular bid
+        if (books >= bid) {
+          // Made the bid: 10 points per bid + 1 point per overtrick (bag)
+          const bidPoints = bid * 10;
+          const bags = books - bid;
+          return bidPoints + bags;
+        } else {
+          // Failed to make bid: lose 10 points per bid
+          return bid * -10;
+        }
       }
     };
     
-    const team1Points = calculateScore(lastHand.team1Bid, team1Book);
-    const team2Points = calculateScore(lastHand.team2Bid, team2Book);
+    const team1Points = calculateScore(lastHand.team1Bid, team1Book, lastHand.team1BlindBid);
+    const team2Points = calculateScore(lastHand.team2Bid, team2Book, lastHand.team2BlindBid);
     
     updatedHands[lastHandIndex] = {
       ...updatedHands[lastHandIndex],
@@ -675,6 +694,13 @@ export default function LiveSpadesScreen() {
           </View>
           <View style={styles.scoreDisplay}>
             <ThemedText style={styles.scoreText}>{team1Score} - {team2Score}</ThemedText>
+            {selectedTeam1 && selectedTeam2 && (
+              <View style={styles.scoreTeamNames}>
+                <ThemedText style={styles.scoreTeamName}>{selectedTeam1.name}</ThemedText>
+                <ThemedText style={styles.scoreTeamSeparator}>vs</ThemedText>
+                <ThemedText style={styles.scoreTeamName}>{selectedTeam2.name}</ThemedText>
+              </View>
+            )}
           </View>
         </View>
 
@@ -696,28 +722,42 @@ export default function LiveSpadesScreen() {
                     <ThemedText style={styles.handNumber}>Hand {index + 1}</ThemedText>
                     <View style={styles.handDetails}>
                       <View style={styles.handTeamRow}>
-                        <ThemedText style={styles.handLabel}>Team 1 Bid:</ThemedText>
-                        <ThemedText style={styles.handValue}>{hand.team1Bid}</ThemedText>
+                        <ThemedText style={styles.handLabel}>{selectedTeam1?.name || 'Team 1'} Bid:</ThemedText>
+                        <View style={styles.handBidValue}>
+                          <ThemedText style={styles.handValue}>{hand.team1Bid}</ThemedText>
+                          {hand.team1BlindBid && (
+                            <View style={styles.blindBadge}>
+                              <ThemedText style={styles.blindBadgeText}>BLIND</ThemedText>
+                            </View>
+                          )}
+                        </View>
                       </View>
                       <View style={styles.handTeamRow}>
-                        <ThemedText style={styles.handLabel}>Team 2 Bid:</ThemedText>
-                        <ThemedText style={styles.handValue}>{hand.team2Bid}</ThemedText>
+                        <ThemedText style={styles.handLabel}>{selectedTeam2?.name || 'Team 2'} Bid:</ThemedText>
+                        <View style={styles.handBidValue}>
+                          <ThemedText style={styles.handValue}>{hand.team2Bid}</ThemedText>
+                          {hand.team2BlindBid && (
+                            <View style={styles.blindBadge}>
+                              <ThemedText style={styles.blindBadgeText}>BLIND</ThemedText>
+                            </View>
+                          )}
+                        </View>
                       </View>
                       {hand.status === 'waiting_for_books' ? (
                         <ThemedText style={styles.waitingText}>Waiting for books...</ThemedText>
                       ) : (
                         <>
                           <View style={styles.handTeamRow}>
-                            <ThemedText style={styles.handLabel}>Team 1 Books:</ThemedText>
+                            <ThemedText style={styles.handLabel}>{selectedTeam1?.name || 'Team 1'} Books:</ThemedText>
                             <ThemedText style={styles.handValue}>{hand.team1Books}</ThemedText>
                           </View>
                           <View style={styles.handTeamRow}>
-                            <ThemedText style={styles.handLabel}>Team 2 Books:</ThemedText>
+                            <ThemedText style={styles.handLabel}>{selectedTeam2?.name || 'Team 2'} Books:</ThemedText>
                             <ThemedText style={styles.handValue}>{hand.team2Books}</ThemedText>
                           </View>
                           <View style={styles.handDivider} />
                           <View style={styles.handTeamRow}>
-                            <ThemedText style={styles.handLabel}>Team 1 Points:</ThemedText>
+                            <ThemedText style={styles.handLabel}>{selectedTeam1?.name || 'Team 1'} Points:</ThemedText>
                             <ThemedText style={[
                               styles.handValue,
                               hand.team1Points > 0 ? styles.positivePoints : styles.negativePoints
@@ -726,7 +766,7 @@ export default function LiveSpadesScreen() {
                             </ThemedText>
                           </View>
                           <View style={styles.handTeamRow}>
-                            <ThemedText style={styles.handLabel}>Team 2 Points:</ThemedText>
+                            <ThemedText style={styles.handLabel}>{selectedTeam2?.name || 'Team 2'} Points:</ThemedText>
                             <ThemedText style={[
                               styles.handValue,
                               hand.team2Points > 0 ? styles.positivePoints : styles.negativePoints
@@ -817,7 +857,11 @@ export default function LiveSpadesScreen() {
         visible={showBidModal}
         transparent={true}
         animationType="slide"
-        onRequestClose={() => setShowBidModal(false)}
+        onRequestClose={() => {
+          setShowBidModal(false);
+          setTeam1BlindBid(false);
+          setTeam2BlindBid(false);
+        }}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.bidModalContent}>
@@ -826,7 +870,7 @@ export default function LiveSpadesScreen() {
             <View style={styles.bidsContainer}>
               {/* Team 1 Bid */}
               <View style={styles.bidSection}>
-                <ThemedText style={styles.bidTeamHeader}>Team 1</ThemedText>
+                <ThemedText style={styles.bidTeamHeader}>{selectedTeam1?.name || 'Team 1'}</ThemedText>
                 <View style={styles.bidControls}>
                   <TouchableOpacity 
                     style={styles.bidButton}
@@ -842,11 +886,25 @@ export default function LiveSpadesScreen() {
                     <ThemedText style={styles.bidButtonText}>+</ThemedText>
                   </TouchableOpacity>
                 </View>
+                <View style={styles.blindBidToggle}>
+                  <ThemedText style={styles.blindBidLabel}>Blind Bid</ThemedText>
+                  <Switch
+                    value={team1BlindBid}
+                    onValueChange={setTeam1BlindBid}
+                    trackColor={{ false: '#2A2A2A', true: '#EF4444' }}
+                    thumbColor={team1BlindBid ? '#ECEDEE' : '#9BA1A6'}
+                  />
+                </View>
+                {team1BlindBid && (
+                  <ThemedText style={styles.blindBidDescription}>
+                    Must get exactly {team1Bid || 0} books. 2x points if successful, 2x loss if failed.
+                  </ThemedText>
+                )}
               </View>
 
               {/* Team 2 Bid */}
               <View style={styles.bidSection}>
-                <ThemedText style={styles.bidTeamHeader}>Team 2</ThemedText>
+                <ThemedText style={styles.bidTeamHeader}>{selectedTeam2?.name || 'Team 2'}</ThemedText>
                 <View style={styles.bidControls}>
                   <TouchableOpacity 
                     style={styles.bidButton}
@@ -862,6 +920,20 @@ export default function LiveSpadesScreen() {
                     <ThemedText style={styles.bidButtonText}>+</ThemedText>
                   </TouchableOpacity>
                 </View>
+                <View style={styles.blindBidToggle}>
+                  <ThemedText style={styles.blindBidLabel}>Blind Bid</ThemedText>
+                  <Switch
+                    value={team2BlindBid}
+                    onValueChange={setTeam2BlindBid}
+                    trackColor={{ false: '#2A2A2A', true: '#EF4444' }}
+                    thumbColor={team2BlindBid ? '#ECEDEE' : '#9BA1A6'}
+                  />
+                </View>
+                {team2BlindBid && (
+                  <ThemedText style={styles.blindBidDescription}>
+                    Must get exactly {team2Bid || 0} books. 2x points if successful, 2x loss if failed.
+                  </ThemedText>
+                )}
               </View>
             </View>
 
@@ -869,7 +941,11 @@ export default function LiveSpadesScreen() {
             <View style={styles.bidModalActions}>
               <TouchableOpacity 
                 style={styles.cancelButton}
-                onPress={() => setShowBidModal(false)}
+                onPress={() => {
+                  setShowBidModal(false);
+                  setTeam1BlindBid(false);
+                  setTeam2BlindBid(false);
+                }}
               >
                 <ThemedText style={styles.cancelButtonText}>Cancel</ThemedText>
               </TouchableOpacity>
@@ -898,7 +974,7 @@ export default function LiveSpadesScreen() {
             <View style={styles.bidsContainer}>
               {/* Team 1 Book */}
               <View style={styles.bidSection}>
-                <ThemedText style={styles.bidTeamHeader}>Team 1</ThemedText>
+                <ThemedText style={styles.bidTeamHeader}>{selectedTeam1?.name || 'Team 1'}</ThemedText>
                 <View style={styles.bidControls}>
                   <TouchableOpacity 
                     style={styles.bidButton}
@@ -918,7 +994,7 @@ export default function LiveSpadesScreen() {
 
               {/* Team 2 Book */}
               <View style={styles.bidSection}>
-                <ThemedText style={styles.bidTeamHeader}>Team 2</ThemedText>
+                <ThemedText style={styles.bidTeamHeader}>{selectedTeam2?.name || 'Team 2'}</ThemedText>
                 <View style={styles.bidControls}>
                   <TouchableOpacity 
                     style={styles.bidButton}
@@ -1200,6 +1276,22 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#ECEDEE',
     lineHeight: 48,
+  },
+  scoreTeamNames: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    gap: 8,
+  },
+  scoreTeamName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#9BA1A6',
+  },
+  scoreTeamSeparator: {
+    fontSize: 12,
+    fontWeight: '400',
+    color: '#9BA1A6',
   },
   handsCard: {
     backgroundColor: '#1A1A24',
@@ -1533,5 +1625,41 @@ const styles = StyleSheet.create({
     color: '#ECEDEE',
     fontSize: 14,
     marginLeft: 8,
+  },
+  blindBidToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    marginTop: 16,
+  },
+  blindBidLabel: {
+    fontSize: 16,
+    color: '#ECEDEE',
+    fontWeight: '600',
+  },
+  blindBidDescription: {
+    fontSize: 12,
+    color: '#9BA1A6',
+    textAlign: 'center',
+    marginTop: 8,
+    paddingHorizontal: 16,
+    lineHeight: 16,
+  },
+  handBidValue: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  blindBadge: {
+    backgroundColor: '#EF4444',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  blindBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#ECEDEE',
   },
 });
