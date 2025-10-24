@@ -7,10 +7,17 @@
 **Purpose**: User profile information
 
 - `user_id` (uuid, PK) - References auth.users.id
-- `display_name` (text) - User's display name
+- `display_name` (text, NOT NULL, UNIQUE) - User's username/display name
+  - **Format**: 3-20 characters, alphanumeric, underscores, hyphens only
+  - **Unique Constraint**: Case-sensitive unique, with case-insensitive index
 - `avatar_url` (text, nullable) - URL to user's avatar
 - `created_at` (timestamptz) - Default: now()
 - **RLS**: Disabled
+- **Constraints**:
+  - `profiles_display_name_unique`: Ensures unique usernames
+  - `profiles_display_name_format`: Enforces username format (^[a-zA-Z0-9_-]{3,20}$)
+- **Indexes**:
+  - `profiles_display_name_lower_idx`: Case-insensitive lookup index
 - **Rows**: 2
 
 ### 2. teams
@@ -174,9 +181,23 @@
 - player_stats_guests references team_guests.guest_id
 - team_stats references teams.team_id
 
+## Helper Functions
+
+### is_username_available(username TEXT)
+
+**Purpose**: Check if a username is available (case-insensitive)
+
+**Returns**: BOOLEAN
+
+- `true` if username is available
+- `false` if username is taken
+
+**Usage**: Called from frontend to validate username availability during signup/profile update
+
 ## Notes
 
 1. **RLS (Row Level Security)** is currently disabled on all tables
 2. **Stats tables** (player_stats_users, player_stats_guests, team_stats) are currently empty - these should be populated via triggers or scheduled jobs when games are completed
 3. **spades_game_team_members** is empty - this should be populated when games start to create a snapshot
 4. **Guest vs User players**: The system supports both registered users and guest players through the dual user_id/guest_id columns
+5. **Username Uniqueness**: As of migration 007, usernames (display_name) are enforced as unique with format validation. The uniqueness is case-sensitive in the database but checked case-insensitively in the application

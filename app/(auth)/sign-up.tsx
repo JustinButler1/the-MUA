@@ -1,9 +1,11 @@
 import { Colors } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { checkUsernameAvailability, validateUsernameFormat } from '@/lib/username-validation';
 import { router } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   SafeAreaView,
@@ -21,13 +23,61 @@ export default function SignUpScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [usernameError, setUsernameError] = useState<string | null>(null);
+  const [isCheckingUsername, setIsCheckingUsername] = useState(false);
+  const [usernameValid, setUsernameValid] = useState(false);
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'dark'];
   const { signUp } = useAuth();
 
+  // Debounced username validation
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (displayName) {
+        validateUsername(displayName);
+      } else {
+        setUsernameError(null);
+        setUsernameValid(false);
+      }
+    }, 500); // Wait 500ms after user stops typing
+
+    return () => clearTimeout(timeoutId);
+  }, [displayName]);
+
+  const validateUsername = async (username: string) => {
+    setIsCheckingUsername(true);
+    setUsernameError(null);
+
+    // First check format
+    const formatCheck = validateUsernameFormat(username);
+    if (!formatCheck.valid) {
+      setUsernameError(formatCheck.error || null);
+      setUsernameValid(false);
+      setIsCheckingUsername(false);
+      return;
+    }
+
+    // Then check availability
+    const availabilityCheck = await checkUsernameAvailability(username);
+    if (!availabilityCheck.available) {
+      setUsernameError(availabilityCheck.error || null);
+      setUsernameValid(false);
+    } else {
+      setUsernameError(null);
+      setUsernameValid(true);
+    }
+
+    setIsCheckingUsername(false);
+  };
+
   const handleSignUp = async () => {
     if (!displayName || !email || !password) {
       setError('Please fill in all fields');
+      return;
+    }
+
+    if (!usernameValid) {
+      setError('Please choose a valid and available username');
       return;
     }
 
@@ -90,19 +140,42 @@ export default function SignUpScreen() {
 
           {/* Display Name Input */}
           <View style={styles.inputContainer}>
-            <Text style={[styles.inputLabel, { color: colors.text }]}>Display name</Text>
-            <TextInput
-              style={[styles.input, { 
-                backgroundColor: colors.background === '#fff' ? '#e5e5e5' : '#2a2a2f',
-                color: colors.text 
-              }]}
-              placeholder="Enter your display name"
-              placeholderTextColor={colors.icon}
-              value={displayName}
-              onChangeText={setDisplayName}
-              autoCapitalize="words"
-              autoCorrect={false}
-            />
+            <Text style={[styles.inputLabel, { color: colors.text }]}>Username</Text>
+            <View style={styles.inputWithIcon}>
+              <TextInput
+                style={[styles.input, { 
+                  backgroundColor: colors.background === '#fff' ? '#e5e5e5' : '#2a2a2f',
+                  color: colors.text,
+                  borderWidth: usernameError ? 2 : 0,
+                  borderColor: usernameError ? '#ff4444' : 'transparent',
+                }]}
+                placeholder="Choose a username"
+                placeholderTextColor={colors.icon}
+                value={displayName}
+                onChangeText={setDisplayName}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              {isCheckingUsername && (
+                <ActivityIndicator 
+                  size="small" 
+                  color={colors.tint} 
+                  style={styles.inputIcon}
+                />
+              )}
+              {!isCheckingUsername && usernameValid && displayName && (
+                <Text style={[styles.inputIcon, { color: '#00aa00', fontSize: 20 }]}>✓</Text>
+              )}
+            </View>
+            {usernameError && (
+              <Text style={styles.validationError}>{usernameError}</Text>
+            )}
+            {!usernameError && displayName && usernameValid && (
+              <Text style={styles.validationSuccess}>Username is available!</Text>
+            )}
+            <Text style={[styles.inputHint, { color: colors.icon }]}>
+              3-20 characters: letters, numbers, underscores, hyphens
+            </Text>
           </View>
 
           {/* Email Input */}
@@ -269,5 +342,27 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 14,
     textAlign: 'center',
+  },
+  inputWithIcon: {
+    position: 'relative',
+  },
+  inputIcon: {
+    position: 'absolute',
+    right: 16,
+    top: 15,
+  },
+  validationError: {
+    color: '#ff4444',
+    fontSize: 12,
+    marginTop: 4,
+  },
+  validationSuccess: {
+    color: '#00aa00',
+    fontSize: 12,
+    marginTop: 4,
+  },
+  inputHint: {
+    fontSize: 12,
+    marginTop: 4,
   },
 });
