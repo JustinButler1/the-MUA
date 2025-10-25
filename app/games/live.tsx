@@ -4,9 +4,10 @@ import { Colors } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Modal, ScrollView, StatusBar, StyleSheet, Switch, TouchableOpacity, View } from 'react-native';
 
 interface Team {
@@ -15,9 +16,22 @@ interface Team {
   members: string;
 }
 
+interface GameState {
+  selectedTeam1: Team | null;
+  selectedTeam2: Team | null;
+  team1Score: number;
+  team2Score: number;
+  gameHands: any[];
+  waitingForBooks: boolean;
+  targetScore: number;
+  gameStartTime: string;
+}
+
 const hands: any[] = [
   // Mock hands data - empty initially
 ];
+
+const GAME_STATE_KEY = '@live_spades_game_state';
 
 export default function LiveSpadesScreen() {
   const colorScheme = useColorScheme();
@@ -48,8 +62,10 @@ export default function LiveSpadesScreen() {
   const [isSaving, setIsSaving] = useState(false);
   const scanningRef = useRef(false);
   const lastScanTimeRef = useRef(0);
-  const [gameStartTime] = useState(new Date());
+  const [gameStartTime, setGameStartTime] = useState(new Date());
   const [isLoadingTeams, setIsLoadingTeams] = useState(true);
+  const [isLoadingState, setIsLoadingState] = useState(true);
+  const [hasRestoredState, setHasRestoredState] = useState(false);
 
   const fetchTeams = useCallback(async () => {
     if (!user) {
@@ -129,6 +145,69 @@ export default function LiveSpadesScreen() {
       setIsLoadingTeams(false);
     }
   }, [user]);
+
+  // Save game state to AsyncStorage
+  const saveGameState = useCallback(async () => {
+    try {
+      const state: GameState = {
+        selectedTeam1,
+        selectedTeam2,
+        team1Score,
+        team2Score,
+        gameHands,
+        waitingForBooks,
+        targetScore,
+        gameStartTime: gameStartTime.toISOString(),
+      };
+      await AsyncStorage.setItem(GAME_STATE_KEY, JSON.stringify(state));
+    } catch (error) {
+      console.error('Error saving game state:', error);
+    }
+  }, [selectedTeam1, selectedTeam2, team1Score, team2Score, gameHands, waitingForBooks, targetScore, gameStartTime]);
+
+  // Load game state from AsyncStorage
+  const loadGameState = useCallback(async () => {
+    try {
+      const savedState = await AsyncStorage.getItem(GAME_STATE_KEY);
+      if (savedState) {
+        const state: GameState = JSON.parse(savedState);
+        setSelectedTeam1(state.selectedTeam1);
+        setSelectedTeam2(state.selectedTeam2);
+        setTeam1Score(state.team1Score);
+        setTeam2Score(state.team2Score);
+        setGameHands(state.gameHands);
+        setWaitingForBooks(state.waitingForBooks);
+        setTargetScore(state.targetScore);
+        setGameStartTime(new Date(state.gameStartTime));
+        setHasRestoredState(true);
+      }
+    } catch (error) {
+      console.error('Error loading game state:', error);
+    } finally {
+      setIsLoadingState(false);
+    }
+  }, []);
+
+  // Clear game state from AsyncStorage
+  const clearGameState = useCallback(async () => {
+    try {
+      await AsyncStorage.removeItem(GAME_STATE_KEY);
+    } catch (error) {
+      console.error('Error clearing game state:', error);
+    }
+  }, []);
+
+  // Load saved game state on mount
+  useEffect(() => {
+    loadGameState();
+  }, [loadGameState]);
+
+  // Save game state whenever relevant state changes
+  useEffect(() => {
+    if (!isLoadingState) {
+      saveGameState();
+    }
+  }, [selectedTeam1, selectedTeam2, team1Score, team2Score, gameHands, waitingForBooks, targetScore, isLoadingState, saveGameState]);
 
   // Fetch teams when component mounts or when coming back to the screen
   useFocusEffect(
@@ -353,7 +432,8 @@ export default function LiveSpadesScreen() {
         }
       }
 
-      // Success! Navigate back to spades screen
+      // Success! Clear saved state and navigate back
+      await clearGameState();
       Alert.alert('Success', 'Game saved successfully!', [
         {
           text: 'OK',
@@ -564,6 +644,35 @@ export default function LiveSpadesScreen() {
     setTeam2BlindBid(false);
   };
 
+  const startNewGame = () => {
+    Alert.alert(
+      'Start New Game',
+      'Are you sure you want to start a new game? This will discard your current progress.',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Start New',
+          style: 'destructive',
+          onPress: async () => {
+            await clearGameState();
+            setSelectedTeam1(null);
+            setSelectedTeam2(null);
+            setTeam1Score(0);
+            setTeam2Score(0);
+            setGameHands([]);
+            setWaitingForBooks(false);
+            setTargetScore(500);
+            setGameStartTime(new Date());
+            setHasRestoredState(false);
+          },
+        },
+      ]
+    );
+  };
+
   const saveBook = () => {
     // Update the last hand with book values
     const updatedHands = [...gameHands];
@@ -629,16 +738,47 @@ export default function LiveSpadesScreen() {
     setShowBookModal(false);
   };
 
+  // Show loading screen while state is being loaded
+  if (isLoadingState) {
+    return (
+      <ThemedView style={[styles.container, { backgroundColor: Colors[colorScheme ?? 'dark'].background }]}>
+        <View style={styles.centerContainer}>
+          <ActivityIndicator size="large" color="#EF4444" />
+          <ThemedText style={styles.loadingText}>Loading game...</ThemedText>
+        </View>
+      </ThemedView>
+    );
+  }
+
   return (
     <ThemedView style={[styles.container, { backgroundColor: Colors[colorScheme ?? 'dark'].background }]}>
       <StatusBar barStyle="light-content" backgroundColor="#0A0A0F" />
       
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* Live Spades Game Title */}
-        <ThemedText style={styles.title}>Live Spades Game</ThemedText>
+        <View style={styles.titleContainer}>
+          <ThemedText style={styles.title}>Live Spades Game</ThemedText>
+          {(selectedTeam1 || selectedTeam2 || gameHands.length > 0) && (
+            <TouchableOpacity 
+              style={styles.newGameButton}
+              onPress={startNewGame}
+            >
+              <ThemedText style={styles.newGameButtonText}>New Game</ThemedText>
+            </TouchableOpacity>
+          )}
+        </View>
         <ThemedText style={styles.description}>
           Track each hand as you play. When you finish, the match will be saved to your library.
         </ThemedText>
+
+        {/* Restored State Banner */}
+        {hasRestoredState && (
+          <View style={styles.restoredBanner}>
+            <ThemedText style={styles.restoredBannerText}>
+              ✓ Game progress restored
+            </ThemedText>
+          </View>
+        )}
 
         {/* Team 1 Section */}
         <View style={styles.section}>
@@ -1218,18 +1358,56 @@ const styles = StyleSheet.create({
     paddingTop: 30,
     flexGrow: 1,
   },
+  centerContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 16,
+  },
+  titleContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
   title: {
     fontSize: 28,
     fontWeight: 'bold',
     color: '#ECEDEE',
-    marginBottom: 8,
     lineHeight: 28,
+    flex: 1,
+  },
+  newGameButton: {
+    backgroundColor: '#1A1A24',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+  },
+  newGameButtonText: {
+    color: '#EF4444',
+    fontSize: 14,
+    fontWeight: '600',
   },
   description: {
     fontSize: 16,
     color: '#9BA1A6',
     lineHeight: 24,
     marginBottom: 32,
+  },
+  restoredBanner: {
+    backgroundColor: '#1A3A1A',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: '#22C55E',
+  },
+  restoredBannerText: {
+    color: '#22C55E',
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
   },
   section: {
     marginBottom: 24,
