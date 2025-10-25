@@ -123,6 +123,21 @@ export default function CreateTeamScreen() {
     setIsLoading(true);
 
     try {
+      // Check if team name is available (case-insensitive)
+      const { data: isAvailable, error: checkError } = await supabase
+        .rpc('is_team_name_available', { team_name: teamName.trim() });
+
+      if (checkError) {
+        console.error('Error checking team name availability:', checkError);
+        Alert.alert('Error', 'Failed to validate team name');
+        return;
+      }
+
+      if (!isAvailable) {
+        Alert.alert('Team Name Taken', 'This team name is already in use. Please choose a different name.');
+        return;
+      }
+
       // Create the team
       const { data: teamData, error: teamError } = await supabase
         .from('teams')
@@ -135,7 +150,12 @@ export default function CreateTeamScreen() {
 
       if (teamError) {
         console.error('Error creating team:', teamError);
-        Alert.alert('Error', 'Failed to create team');
+        // Check if it's a unique constraint violation
+        if (teamError.code === '23505' || teamError.message?.includes('teams_name_unique')) {
+          Alert.alert('Team Name Taken', 'This team name is already in use. Please choose a different name.');
+        } else {
+          Alert.alert('Error', 'Failed to create team');
+        }
         return;
       }
 

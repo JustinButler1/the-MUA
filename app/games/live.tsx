@@ -123,17 +123,12 @@ export default function LiveSpadesScreen() {
       }
 
       setAvailableTeams(teamsData);
-      
-      // Set first team as default if not already selected
-      if (teamsData.length > 0 && !selectedTeam1) {
-        setSelectedTeam1(teamsData[0]);
-      }
     } catch (error) {
       console.error('Error fetching teams:', error);
     } finally {
       setIsLoadingTeams(false);
     }
-  }, [user, selectedTeam1]);
+  }, [user]);
 
   // Fetch teams when component mounts or when coming back to the screen
   useFocusEffect(
@@ -660,7 +655,20 @@ export default function LiveSpadesScreen() {
             >
               <ThemedText style={styles.teamName}>{selectedTeam1.name}</ThemedText>
               <ThemedText style={styles.teamMembers}>{selectedTeam1.members}</ThemedText>
+              <ThemedText style={styles.tapToChangeText}>Tap to select a different team</ThemedText>
             </TouchableOpacity>
+          ) : availableTeams.length > 0 ? (
+            <View style={styles.teamCard}>
+              <ThemedText style={styles.teamInstructions}>
+                Select your team to start the game.
+              </ThemedText>
+              <TouchableOpacity 
+                style={styles.scanQRButton} 
+                onPress={() => setShowTeamSelection(true)}
+              >
+                <ThemedText style={styles.scanQRButtonText}>Select Team</ThemedText>
+              </TouchableOpacity>
+            </View>
           ) : (
             <View style={styles.teamCard}>
               <ThemedText style={styles.teamInstructions}>
@@ -834,7 +842,15 @@ export default function LiveSpadesScreen() {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <ThemedText style={styles.modalTitle}>Select Team</ThemedText>
+            <View style={styles.modalHeader}>
+              <ThemedText style={styles.modalTitle}>Select Team</ThemedText>
+              <TouchableOpacity
+                style={styles.modalCloseButton}
+                onPress={() => setShowTeamSelection(false)}
+              >
+                <ThemedText style={styles.modalCloseButtonText}>✕</ThemedText>
+              </TouchableOpacity>
+            </View>
             
             <ScrollView style={styles.teamsList}>
               {availableTeams.map((team) => (
@@ -1441,12 +1457,33 @@ const styles = StyleSheet.create({
     width: '100%',
     maxHeight: '70%',
   },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
   modalTitle: {
     fontSize: 20,
     fontWeight: 'bold',
     color: '#ECEDEE',
-    marginBottom: 20,
+    flex: 1,
     textAlign: 'center',
+  },
+  modalCloseButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#2A2A2A',
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'absolute',
+    right: 0,
+  },
+  modalCloseButtonText: {
+    fontSize: 20,
+    color: '#ECEDEE',
+    fontWeight: '600',
   },
   teamsList: {
     maxHeight: 300,

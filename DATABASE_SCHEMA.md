@@ -25,11 +25,15 @@
 **Purpose**: Team/partnership information for games
 
 - `id` (uuid, PK) - Default: gen_random_uuid()
-- `name` (text, nullable) - Team name
+- `name` (text, NOT NULL, UNIQUE) - Team name
 - `created_by` (uuid) - References profiles.user_id
 - `created_at` (timestamptz, nullable) - Default: now()
 - `archived` (boolean, nullable)
 - **RLS**: Disabled
+- **Constraints**:
+  - `teams_name_unique`: Ensures unique team names
+- **Indexes**:
+  - `teams_name_lower_idx`: Case-insensitive lookup index
 - **Rows**: 4
 
 ### 3. team_members
@@ -193,6 +197,17 @@
 - `false` if username is taken
 
 **Usage**: Called from frontend to validate username availability during signup/profile update
+
+### is_team_name_available(team_name TEXT)
+
+**Purpose**: Check if a team name is available (case-insensitive)
+
+**Returns**: BOOLEAN
+
+- `true` if team name is available
+- `false` if team name is taken
+
+**Usage**: Called from frontend to validate team name availability during team creation
 
 ## Notes
 
