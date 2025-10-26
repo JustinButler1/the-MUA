@@ -34,9 +34,9 @@ export default function GamesScreen() {
           
           <GameCard
             title="Chess"
-            description="LIVE SCORE TRACKING IN DEVELOPMENT"
-            badgeType="soon"
-            onPress={() => {}}
+            description="TRACK MATCHES AND USE CHESS CLOCK"
+            badgeType="live"
+            onPress={() => router.push('/(tabs)/games/chess')}
           />
         </View>
       </ScrollView>

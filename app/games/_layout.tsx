@@ -25,6 +25,13 @@ export default function GamesStackLayout() {
             presentation: 'card',
           }} 
         />
+        <Stack.Screen 
+          name="chess-clock" 
+          options={{ 
+            title: 'Chess Clock',
+            presentation: 'card',
+          }} 
+        />
       </Stack>
       <StatusBar style="auto" />
     </ThemeProvider>

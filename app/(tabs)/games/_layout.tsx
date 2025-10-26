@@ -17,6 +17,10 @@ export default function GamesLayout() {
             title: 'Spades Games',
             headerBackTitle: 'Arena',
             headerShown: true }} />
+        <Stack.Screen name="chess" options={{
+            title: 'Chess Games',
+            headerBackTitle: 'Arena',
+            headerShown: true }} />
       </Stack>
       <StatusBar style="auto" />
     </ThemeProvider>
