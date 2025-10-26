@@ -3,6 +3,7 @@ import { ThemedView } from '@/components/themed-view';
 import { Colors } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { deleteGame } from '@/lib/game-deletion';
 import { supabase } from '@/lib/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CameraView, useCameraPermissions } from 'expo-camera';
@@ -274,8 +275,10 @@ export default function LiveSpadesScreen() {
         hand_no: handNumber,
         team1_bid: hand.team1Bid,
         team2_bid: hand.team2Bid,
-        team1_books: hand.team1Books,
-        team2_books: hand.team2Books,
+        team1_blind_bid: hand.team1BlindBid || false,
+        team2_blind_bid: hand.team2BlindBid || false,
+        team1_books: hand.team1Books ?? null,
+        team2_books: hand.team2Books ?? null,
         team1_delta: hand.team1Points || 0,
         team2_delta: hand.team2Points || 0,
         team1_total_after: team1Total,
@@ -381,9 +384,9 @@ export default function LiveSpadesScreen() {
         team2Books: hand.team2_books,
         team1Points: hand.team1_delta,
         team2Points: hand.team2_delta,
-        team1BlindBid: false, // TODO: Add blind bid tracking to database
-        team2BlindBid: false,
-        status: 'completed',
+        team1BlindBid: hand.team1_blind_bid || false,
+        team2BlindBid: hand.team2_blind_bid || false,
+        status: hand.team1_books !== null && hand.team2_books !== null ? 'completed' : 'waiting_for_books',
       })) || [];
 
       setGameHands(convertedHands);
@@ -510,7 +513,7 @@ export default function LiveSpadesScreen() {
   useEffect(() => {
     if (!gameId) return;
 
-    console.log('Setting up realtime subscription for game:', gameId);
+    console.log('CUSTOM LOG: Setting up realtime subscription for game:', gameId);
 
     // Subscribe to changes in the spades_hands table and spades_games table for this game
     const gameSubscription = supabase
@@ -524,11 +527,30 @@ export default function LiveSpadesScreen() {
           filter: `game_id=eq.${gameId}`,
         },
         async (payload) => {
-          console.log('Received hand update:', payload);
-          
-          // Reload the full game data to ensure consistency
-          if (urlGameId) {
-            await loadGameFromDatabase(urlGameId);
+          console.log('Received hand update:', {
+            eventType: payload.eventType,
+            table: payload.table,
+            schema: payload.schema,
+            old: payload.old,
+            new: payload.new
+          });
+          console.log('CUSTOM LOG: Received hand update:', payload);
+          // Handle different event types
+          if (payload.eventType === 'DELETE') {
+            // When a hand is deleted, we need to refresh the game state
+            console.log('Hand deleted, refreshing game state. Old record:', payload.old);
+            console.log('Loading game from database after DELETE event');
+            await loadGameFromDatabase(gameId);
+          } else if (payload.eventType === 'INSERT') {
+            // New hand added
+            console.log('New hand added, refreshing game state. New record:', payload.new);
+            console.log('Loading game from database after INSERT event');
+            await loadGameFromDatabase(gameId);
+          } else if (payload.eventType === 'UPDATE') {
+            // Hand updated (books added or bid modified)
+            console.log('Hand updated, refreshing game state. Old:', payload.old, 'New:', payload.new);
+            console.log('Loading game from database after UPDATE event');
+            await loadGameFromDatabase(gameId);
           }
         }
       )
@@ -543,20 +565,34 @@ export default function LiveSpadesScreen() {
         async (payload) => {
           console.log('Received game update:', payload);
           
-          // Reload the full game data when game is updated (e.g., host transfer)
-          if (urlGameId) {
-            await loadGameFromDatabase(urlGameId);
+          // Update target score if it changed
+          if (payload.new && payload.new.goal_score !== undefined) {
+            setTargetScore(payload.new.goal_score);
           }
+          
+          // Reload the full game data when game is updated (e.g., host transfer)
+          console.log('Loading game from database after game update');
+          await loadGameFromDatabase(gameId);
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('CUSTOM LOG: Realtime subscription status:', status);
+        if (status === 'SUBSCRIBED') {
+          console.log('CUSTOM LOG: Successfully subscribed to realtime updates for game:', gameId);
+          console.log('CUSTOM LOG: Subscription channel:', `game-updates-${gameId}`);
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('CUSTOM LOG: Error subscribing to realtime updates for game:', gameId);
+        } else {
+          console.log('CUSTOM LOG: Subscription status changed to:', status);
+        }
+      });
 
     // Clean up subscription on unmount
     return () => {
       console.log('Cleaning up realtime subscription');
       supabase.removeChannel(gameSubscription);
     };
-  }, [gameId, urlGameId, loadGameFromDatabase]);
+  }, [gameId, loadGameFromDatabase]);
 
   // Fetch teams when component mounts or when coming back to the screen
   useFocusEffect(
@@ -596,7 +632,7 @@ export default function LiveSpadesScreen() {
     setShowUndoModal(true);
   };
 
-  const confirmUndo = () => {
+  const confirmUndo = async () => {
     if (gameHands.length === 0) {
       setShowUndoModal(false);
       return;
@@ -623,10 +659,68 @@ export default function LiveSpadesScreen() {
       
       setGameHands(updatedHands);
       setWaitingForBooks(true);
+      
+      // Update database to reflect the undo
+      if (gameId) {
+        const handNumber = updatedHands.length;
+        await saveHandToDatabase(updatedHands[updatedHands.length - 1], handNumber, team1Score - (lastHand.team1Points || 0), team2Score - (lastHand.team2Points || 0));
+      }
     } else if (lastHand.status === 'waiting_for_books') {
       // Last action was adding bids - remove the entire hand
+      const handNumberToDelete = updatedHands.length;
       updatedHands.pop();
       setGameHands(updatedHands);
+      
+      // Delete the hand from database
+      if (gameId) {
+        try {
+          console.log(`CUSTOM LOG: About to delete hand ${handNumberToDelete} from database for game ${gameId}`);
+          const { error, data } = await supabase
+            .from('spades_hands')
+            .delete()
+            .eq('game_id', gameId)
+            .eq('hand_no', handNumberToDelete)
+            .select(); // Add select to see what was deleted
+          
+          if (error) {
+            console.error('CUSTOM LOG: Error deleting hand from database:', error);
+          } else {
+            console.log('CUSTOM LOG: Successfully deleted hand from database. Deleted data:', data);
+            console.log('CUSTOM LOG: This should trigger a realtime DELETE event');
+            
+            // Check if subscription is active
+            const channel = supabase.getChannels().find(ch => ch.topic === `game-updates-${gameId}`);
+            console.log('CUSTOM LOG: Current subscription status:', channel?.state);
+            
+            // Fallback: If realtime doesn't work, we can trigger a manual refresh
+            // by updating a dummy field in the game record to force a realtime event
+            console.log('CUSTOM LOG: Triggering fallback realtime event via game update');
+            try {
+              const { error: fallbackError } = await supabase
+                .from('spades_games')
+                .update({ 
+                  goal_score: targetScore // This will trigger a realtime UPDATE event
+                })
+                .eq('id', gameId);
+              
+              if (fallbackError) {
+                console.error('CUSTOM LOG: Fallback realtime trigger failed:', fallbackError);
+              } else {
+                console.log('CUSTOM LOG: Fallback realtime trigger successful');
+              }
+            } catch (fallbackErr) {
+              console.error('CUSTOM LOG: Fallback realtime trigger error:', fallbackErr);
+            }
+            
+            // Small delay to ensure the realtime event is processed
+            setTimeout(() => {
+              console.log('CUSTOM LOG: Realtime event should have been processed by now');
+            }, 100);
+          }
+        } catch (error) {
+          console.error('CUSTOM LOG: Error deleting hand from database:', error);
+        }
+      }
       
       // Check if there's still a hand waiting for books
       if (updatedHands.length > 0) {
@@ -667,9 +761,25 @@ export default function LiveSpadesScreen() {
     });
   };
 
-  const saveTargetScore = () => {
+  const saveTargetScore = async () => {
     setTargetScore(tempTargetScore);
     setShowTargetScoreModal(false);
+    
+    // Update target score in database to trigger realtime updates
+    if (gameId) {
+      try {
+        const { error } = await supabase
+          .from('spades_games')
+          .update({ goal_score: tempTargetScore })
+          .eq('id', gameId);
+        
+        if (error) {
+          console.error('Error updating target score:', error);
+        }
+      } catch (error) {
+        console.error('Error updating target score:', error);
+      }
+    }
   };
 
   const cancelTargetScore = () => {
@@ -795,8 +905,10 @@ export default function LiveSpadesScreen() {
           hand_no: index + 1,
           team1_bid: hand.team1Bid,
           team2_bid: hand.team2Bid,
-          team1_books: hand.team1Books,
-          team2_books: hand.team2Books,
+          team1_blind_bid: hand.team1BlindBid || false,
+          team2_blind_bid: hand.team2BlindBid || false,
+          team1_books: hand.team1Books ?? null,
+          team2_books: hand.team2Books ?? null,
           team1_delta: hand.team1Points || 0,
           team2_delta: hand.team2Points || 0,
           team1_total_after: team1TotalAfter,
@@ -1020,7 +1132,7 @@ export default function LiveSpadesScreen() {
     });
   };
 
-  const saveBid = () => {
+  const saveBid = async () => {
     // Create new hand entry with bids
     const newHand = {
       id: Date.now(),
@@ -1036,6 +1148,13 @@ export default function LiveSpadesScreen() {
     setGameHands([...gameHands, newHand]);
     setWaitingForBooks(true);
     setShowBidModal(false);
+    
+    // Save bid to database immediately to trigger realtime updates
+    if (gameId) {
+      const handNumber = gameHands.length + 1;
+      await saveHandToDatabase(newHand, handNumber, team1Score, team2Score);
+    }
+    
     // Reset blind bid states for next hand
     setTeam1BlindBid(false);
     setTeam2BlindBid(false);
@@ -1119,6 +1238,51 @@ export default function LiveSpadesScreen() {
   const cancelTransferHost = () => {
     setShowTransferConfirmModal(false);
     setSelectedPlayerForTransfer(null);
+  };
+
+  const handleDeleteGame = async () => {
+    if (!gameId || !user) {
+      Alert.alert('Error', 'Unable to delete game');
+      return;
+    }
+
+    Alert.alert(
+      'Delete Game',
+      'Are you sure you want to delete this game? This action cannot be undone and will remove all game data including scores, hands, and statistics.',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const result = await deleteGame(gameId, user.id);
+              
+              if (result.success) {
+                Alert.alert(
+                  'Game Deleted',
+                  'The game has been successfully deleted.',
+                  [
+                    {
+                      text: 'OK',
+                      onPress: () => router.back(),
+                    },
+                  ]
+                );
+              } else {
+                Alert.alert('Error', result.error || 'Failed to delete game');
+              }
+            } catch (error) {
+              console.error('Error deleting game:', error);
+              Alert.alert('Error', 'An unexpected error occurred while deleting the game');
+            }
+          },
+        },
+      ]
+    );
   };
 
   const saveBook = () => {
@@ -1252,6 +1416,20 @@ export default function LiveSpadesScreen() {
             >
               <ThemedText style={styles.transferHostButtonText}>
                 Transfer Host Permissions
+              </ThemedText>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Delete Game Button - only show for game creator */}
+        {!isReadOnly && gameId && (
+          <View style={styles.deleteGameSection}>
+            <TouchableOpacity 
+              style={styles.deleteGameButton}
+              onPress={handleDeleteGame}
+            >
+              <ThemedText style={styles.deleteGameButtonText}>
+                Delete Game
               </ThemedText>
             </TouchableOpacity>
           </View>
@@ -2496,6 +2674,23 @@ const styles = StyleSheet.create({
   },
   transferHostButtonText: {
     color: '#EF4444',
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  deleteGameSection: {
+    marginBottom: 24,
+  },
+  deleteGameButton: {
+    backgroundColor: '#1A1A24',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#DC2626',
+  },
+  deleteGameButtonText: {
+    color: '#DC2626',
     fontSize: 14,
     fontWeight: '600',
     textAlign: 'center',

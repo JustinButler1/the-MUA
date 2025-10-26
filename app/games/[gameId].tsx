@@ -1,11 +1,13 @@
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Colors } from '@/constants/theme';
+import { useAuth } from '@/contexts/AuthContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { canDeleteGame, deleteGame } from '@/lib/game-deletion';
 import { supabase } from '@/lib/supabase';
-import { useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, ScrollView, StatusBar, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, ScrollView, StatusBar, StyleSheet, TouchableOpacity, View } from 'react-native';
 
 interface GameDetails {
   id: string;
@@ -29,13 +31,17 @@ interface TeamRoundData {
   books: number;
   delta: string;
   total: number;
+  blindBid?: boolean;
 }
 
 export default function GameDetailsScreen() {
   const colorScheme = useColorScheme();
+  const { user } = useAuth();
   const { gameId } = useLocalSearchParams<{ gameId: string }>();
   const [gameDetails, setGameDetails] = useState<GameDetails | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [canDelete, setCanDelete] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     const fetchGameDetails = async () => {
@@ -123,16 +129,18 @@ export default function GameDetailsScreen() {
             {
               name: team1Name,
               bid: hand.team1_bid,
-              books: hand.team1_books,
+              books: hand.team1_books ?? 0,
               delta: formatDelta(hand.team1_delta),
               total: hand.team1_total_after,
+              blindBid: hand.team1_blind_bid || false,
             },
             {
               name: team2Name,
               bid: hand.team2_bid,
-              books: hand.team2_books,
+              books: hand.team2_books ?? 0,
               delta: formatDelta(hand.team2_delta),
               total: hand.team2_total_after,
+              blindBid: hand.team2_blind_bid || false,
             },
           ],
         })) || [];
@@ -149,6 +157,12 @@ export default function GameDetailsScreen() {
         };
 
         setGameDetails(details);
+
+        // Check if user can delete this game
+        if (user) {
+          const hasDeletePermission = await canDeleteGame(gameId, user.id);
+          setCanDelete(hasDeletePermission);
+        }
       } catch (error) {
         console.error('Unexpected error fetching game details:', error);
         Alert.alert('Error', 'An unexpected error occurred');
@@ -158,7 +172,55 @@ export default function GameDetailsScreen() {
     };
 
     fetchGameDetails();
-  }, [gameId]);
+  }, [gameId, user]);
+
+  const handleDeleteGame = async () => {
+    if (!gameId || !user) {
+      Alert.alert('Error', 'Unable to delete game');
+      return;
+    }
+
+    Alert.alert(
+      'Delete Game',
+      'Are you sure you want to delete this game? This action cannot be undone and will remove all game data including scores, hands, and statistics.',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            setIsDeleting(true);
+            try {
+              const result = await deleteGame(gameId, user.id);
+              
+              if (result.success) {
+                Alert.alert(
+                  'Game Deleted',
+                  'The game has been successfully deleted.',
+                  [
+                    {
+                      text: 'OK',
+                      onPress: () => router.back(),
+                    },
+                  ]
+                );
+              } else {
+                Alert.alert('Error', result.error || 'Failed to delete game');
+              }
+            } catch (error) {
+              console.error('Error deleting game:', error);
+              Alert.alert('Error', 'An unexpected error occurred while deleting the game');
+            } finally {
+              setIsDeleting(false);
+            }
+          },
+        },
+      ]
+    );
+  };
 
   if (isLoading) {
     return (
@@ -218,6 +280,21 @@ export default function GameDetailsScreen() {
           </View>
         </View>
 
+        {/* Delete Game Button - only show for users with edit permissions */}
+        {canDelete && (
+          <TouchableOpacity 
+            style={[styles.deleteButton, isDeleting && styles.deleteButtonDisabled]}
+            onPress={handleDeleteGame}
+            disabled={isDeleting}
+          >
+            {isDeleting ? (
+              <ActivityIndicator size="small" color="#ECEDEE" />
+            ) : (
+              <ThemedText style={styles.deleteButtonText}>Delete Game</ThemedText>
+            )}
+          </TouchableOpacity>
+        )}
+
         {/* Round History Section */}
         <ThemedText style={styles.sectionTitle}>Round History</ThemedText>
         
@@ -238,7 +315,14 @@ export default function GameDetailsScreen() {
               {round.teams.map((team, index) => (
                 <View key={index} style={styles.tableRow}>
                   <ThemedText style={styles.tableCell}>{team.name}</ThemedText>
-                  <ThemedText style={styles.tableCell}>{team.bid}/{team.books}</ThemedText>
+                  <View style={styles.bidCell}>
+                    <ThemedText style={styles.tableCell}>{team.bid}/{team.books}</ThemedText>
+                    {team.blindBid && (
+                      <View style={styles.blindBadge}>
+                        <ThemedText style={styles.blindBadgeText}>BLIND</ThemedText>
+                      </View>
+                    )}
+                  </View>
                   <ThemedText style={[styles.tableCell, styles.deltaCell]}>{team.delta}</ThemedText>
                   <ThemedText style={styles.tableCell}>{team.total}</ThemedText>
                 </View>
@@ -395,5 +479,38 @@ const styles = StyleSheet.create({
     color: '#ECEDEE',
     fontSize: 16,
     marginTop: 16,
+  },
+  deleteButton: {
+    backgroundColor: '#DC2626',
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    marginBottom: 32,
+    alignItems: 'center',
+  },
+  deleteButtonDisabled: {
+    opacity: 0.5,
+  },
+  deleteButtonText: {
+    color: '#ECEDEE',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  bidCell: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  blindBadge: {
+    backgroundColor: '#EF4444',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  blindBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#ECEDEE',
   },
 });
