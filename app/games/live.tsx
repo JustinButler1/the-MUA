@@ -567,6 +567,21 @@ export default function LiveSpadesScreen() {
 
   const addHand = () => {
     if (waitingForBooks) {
+      // Set smart defaults for books based on bids
+      const lastHand = gameHands[gameHands.length - 1];
+      if (lastHand) {
+        const team1Bid = lastHand.team1Bid;
+        const team2Bid = lastHand.team2Bid;
+        
+        // Team with lower bid defaults to their bid, other team gets the rest
+        if (team1Bid <= team2Bid) {
+          setTeam1Book(team1Bid);
+          setTeam2Book(13 - team1Bid);
+        } else {
+          setTeam2Book(team2Bid);
+          setTeam1Book(13 - team2Bid);
+        }
+      }
       setShowBookModal(true);
     } else {
       setShowBidModal(true);
@@ -975,29 +990,33 @@ export default function LiveSpadesScreen() {
 
   const incrementTeam1Book = () => {
     setTeam1Book(prev => {
-      if (prev === 13) return 0;
-      return prev + 1;
+      const newValue = prev === 13 ? 0 : prev + 1; // Loop from 13 to 0
+      setTeam2Book(13 - newValue); // Automatically adjust team2
+      return newValue;
     });
   };
 
   const decrementTeam1Book = () => {
     setTeam1Book(prev => {
-      if (prev === 0) return 13;
-      return prev - 1;
+      const newValue = prev === 0 ? 13 : prev - 1; // Loop from 0 to 13
+      setTeam2Book(13 - newValue); // Automatically adjust team2
+      return newValue;
     });
   };
 
   const incrementTeam2Book = () => {
     setTeam2Book(prev => {
-      if (prev === 13) return 0;
-      return prev + 1;
+      const newValue = prev === 13 ? 0 : prev + 1; // Loop from 13 to 0
+      setTeam1Book(13 - newValue); // Automatically adjust team1
+      return newValue;
     });
   };
 
   const decrementTeam2Book = () => {
     setTeam2Book(prev => {
-      if (prev === 0) return 13;
-      return prev - 1;
+      const newValue = prev === 0 ? 13 : prev - 1; // Loop from 0 to 13
+      setTeam1Book(13 - newValue); // Automatically adjust team1
+      return newValue;
     });
   };
 
