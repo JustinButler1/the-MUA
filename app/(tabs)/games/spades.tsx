@@ -25,14 +25,26 @@ interface Game {
   date: string;
 }
 
+interface LiveGame {
+  id: string;
+  team1Name: string;
+  team2Name: string;
+  team1Score: number;
+  team2Score: number;
+  goalScore: number;
+  startedAt: string;
+}
+
 
 export default function SpadesScreen() {
   const colorScheme = useColorScheme();
   const { user } = useAuth();
   const [teams, setTeams] = useState<Team[]>([]);
   const [games, setGames] = useState<Game[]>([]);
+  const [liveGames, setLiveGames] = useState<LiveGame[]>([]);
   const [isLoadingTeams, setIsLoadingTeams] = useState(true);
   const [isLoadingGames, setIsLoadingGames] = useState(true);
+  const [isLoadingLiveGames, setIsLoadingLiveGames] = useState(true);
 
   const fetchTeams = useCallback(async () => {
     if (!user) {
@@ -84,6 +96,92 @@ export default function SpadesScreen() {
       Alert.alert('Error', 'Failed to load teams');
     } finally {
       setIsLoadingTeams(false);
+    }
+  }, [user]);
+
+  const fetchLiveGames = useCallback(async () => {
+    if (!user) {
+      setIsLoadingLiveGames(false);
+      return;
+    }
+
+    try {
+      // Get user's teams
+      const { data: teamMembers, error: teamError } = await supabase
+        .from('team_members')
+        .select('team_id')
+        .eq('user_id', user.id);
+
+      if (teamError) {
+        console.error('Error fetching teams:', teamError);
+        setIsLoadingLiveGames(false);
+        return;
+      }
+
+      const teamIds = teamMembers?.map((member: any) => member.team_id) || [];
+
+      if (teamIds.length === 0) {
+        setLiveGames([]);
+        setIsLoadingLiveGames(false);
+        return;
+      }
+
+      // Fetch active games for user's teams
+      const { data: gamesData, error: gamesError } = await supabase
+        .from('spades_games')
+        .select(`
+          id,
+          team1_id,
+          team2_id,
+          goal_score,
+          started_at,
+          status,
+          team1:teams!team1_id(name),
+          team2:teams!team2_id(name)
+        `)
+        .eq('status', 'in_progress')
+        .or(`team1_id.in.(${teamIds.join(',')}),team2_id.in.(${teamIds.join(',')})`)
+        .order('started_at', { ascending: false });
+
+      if (gamesError) {
+        console.error('Error fetching games:', gamesError);
+        setIsLoadingLiveGames(false);
+        return;
+      }
+
+      // For each game, fetch the latest hands to calculate current scores
+      const gamesWithScores: LiveGame[] = [];
+      
+      for (const game of gamesData || []) {
+        const { data: handsData } = await supabase
+          .from('spades_hands')
+          .select('team1_delta, team2_delta')
+          .eq('game_id', game.id);
+
+        let team1Score = 0;
+        let team2Score = 0;
+
+        handsData?.forEach((hand: any) => {
+          team1Score += hand.team1_delta || 0;
+          team2Score += hand.team2_delta || 0;
+        });
+
+        gamesWithScores.push({
+          id: game.id,
+          team1Name: (game.team1 as any)?.name || 'Team 1',
+          team2Name: (game.team2 as any)?.name || 'Team 2',
+          team1Score,
+          team2Score,
+          goalScore: game.goal_score || 500,
+          startedAt: game.started_at,
+        });
+      }
+
+      setLiveGames(gamesWithScores);
+    } catch (error) {
+      console.error('Error fetching live games:', error);
+    } finally {
+      setIsLoadingLiveGames(false);
     }
   }, [user]);
 
@@ -192,15 +290,62 @@ export default function SpadesScreen() {
 
   useEffect(() => {
     fetchTeams();
+    fetchLiveGames();
     fetchGames();
-  }, [fetchTeams, fetchGames]);
+  }, [fetchTeams, fetchLiveGames, fetchGames]);
+
+  // Subscribe to realtime updates for games
+  useEffect(() => {
+    if (!user) return;
+
+    console.log('Setting up realtime subscription for spades games');
+
+    // Subscribe to changes in spades_games table
+    const gamesSubscription = supabase
+      .channel('spades-games-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*', // Listen to all events (INSERT, UPDATE, DELETE)
+          schema: 'public',
+          table: 'spades_games',
+        },
+        (payload) => {
+          console.log('Received spades_games update:', payload);
+          // Refresh live games and completed games when any game changes
+          fetchLiveGames();
+          fetchGames();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'spades_hands',
+        },
+        (payload) => {
+          console.log('Received spades_hands update:', payload);
+          // Refresh live games when hands are updated (to show updated scores)
+          fetchLiveGames();
+        }
+      )
+      .subscribe();
+
+    // Clean up subscription on unmount
+    return () => {
+      console.log('Cleaning up spades games realtime subscription');
+      supabase.removeChannel(gamesSubscription);
+    };
+  }, [user, fetchLiveGames, fetchGames]);
 
   // Refresh data when screen comes into focus (e.g., returning from create-team)
   useFocusEffect(
     useCallback(() => {
       fetchTeams();
+      fetchLiveGames();
       fetchGames();
-    }, [fetchTeams, fetchGames])
+    }, [fetchTeams, fetchLiveGames, fetchGames])
   );
 
   return (
@@ -228,6 +373,48 @@ export default function SpadesScreen() {
         >
           <ThemedText style={styles.createTeamButtonText}>Create Team</ThemedText>
         </TouchableOpacity>
+
+        {/* Live Games Section */}
+        {isLoadingLiveGames ? (
+          <View style={styles.section}>
+            <ThemedText style={styles.sectionTitle}>LIVE GAMES</ThemedText>
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="small" color="#EF4444" />
+              <ThemedText style={styles.loadingText}>Loading live games...</ThemedText>
+            </View>
+          </View>
+        ) : liveGames.length > 0 ? (
+          <View style={styles.section}>
+            <ThemedText style={styles.sectionTitle}>LIVE GAMES</ThemedText>
+            {liveGames.map((game) => (
+              <TouchableOpacity
+                key={game.id}
+                style={styles.liveGameCard}
+                onPress={() => router.push({ pathname: '/games/live', params: { gameId: game.id } } as any)}
+              >
+                <View style={styles.liveBadge}>
+                  <View style={styles.liveDot} />
+                  <ThemedText style={styles.liveText}>LIVE</ThemedText>
+                </View>
+
+                <View style={styles.gameHeader}>
+                  <View style={styles.teamPill}>
+                    <ThemedText style={styles.teamPillText}>{game.team1Name}</ThemedText>
+                  </View>
+                  <ThemedText style={styles.vsText}>VS</ThemedText>
+                  <View style={styles.teamPill}>
+                    <ThemedText style={styles.teamPillText}>{game.team2Name}</ThemedText>
+                  </View>
+                </View>
+
+                <View style={styles.liveScoreRow}>
+                  <ThemedText style={styles.liveScore}>{game.team1Score} - {game.team2Score}</ThemedText>
+                  <ThemedText style={styles.liveGoal}>of {game.goalScore}</ThemedText>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
+        ) : null}
 
         {/* Your Teams Section */}
         <View style={styles.section}>
@@ -489,5 +676,50 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontStyle: 'italic',
     paddingVertical: 20,
+  },
+  liveGameCard: {
+    backgroundColor: '#1A1A24',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 16,
+    borderWidth: 2,
+    borderColor: '#EF4444',
+  },
+  liveBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: '#2A1A1A',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+  liveDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#EF4444',
+    marginRight: 6,
+  },
+  liveText: {
+    color: '#EF4444',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  liveScoreRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  liveScore: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#ECEDEE',
+  },
+  liveGoal: {
+    fontSize: 14,
+    color: '#9BA1A6',
   },
 });

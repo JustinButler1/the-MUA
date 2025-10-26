@@ -6,7 +6,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { router, useFocusEffect } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Modal, ScrollView, StatusBar, StyleSheet, Switch, TouchableOpacity, View } from 'react-native';
 
@@ -25,6 +25,13 @@ interface GameState {
   waitingForBooks: boolean;
   targetScore: number;
   gameStartTime: string;
+  gameId: string | null;
+}
+
+interface Player {
+  userId: string;
+  displayName: string;
+  teamName: string;
 }
 
 const hands: any[] = [
@@ -36,6 +43,7 @@ const GAME_STATE_KEY = '@live_spades_game_state';
 export default function LiveSpadesScreen() {
   const colorScheme = useColorScheme();
   const { user } = useAuth();
+  const { gameId: urlGameId } = useLocalSearchParams<{ gameId?: string }>();
   const [team1Score, setTeam1Score] = useState(0);
   const [team2Score, setTeam2Score] = useState(0);
   const [gameHands, setGameHands] = useState(hands);
@@ -66,6 +74,14 @@ export default function LiveSpadesScreen() {
   const [isLoadingTeams, setIsLoadingTeams] = useState(true);
   const [isLoadingState, setIsLoadingState] = useState(true);
   const [hasRestoredState, setHasRestoredState] = useState(false);
+  const [gameId, setGameId] = useState<string | null>(null);
+  const [isReadOnly, setIsReadOnly] = useState(false);
+  const [gameCreatorId, setGameCreatorId] = useState<string | null>(null);
+  const [showTransferHostModal, setShowTransferHostModal] = useState(false);
+  const [showTransferConfirmModal, setShowTransferConfirmModal] = useState(false);
+  const [allPlayers, setAllPlayers] = useState<Player[]>([]);
+  const [selectedPlayerForTransfer, setSelectedPlayerForTransfer] = useState<Player | null>(null);
+  const [isLoadingPlayers, setIsLoadingPlayers] = useState(false);
 
   const fetchTeams = useCallback(async () => {
     if (!user) {
@@ -158,12 +174,13 @@ export default function LiveSpadesScreen() {
         waitingForBooks,
         targetScore,
         gameStartTime: gameStartTime.toISOString(),
+        gameId,
       };
       await AsyncStorage.setItem(GAME_STATE_KEY, JSON.stringify(state));
     } catch (error) {
       console.error('Error saving game state:', error);
     }
-  }, [selectedTeam1, selectedTeam2, team1Score, team2Score, gameHands, waitingForBooks, targetScore, gameStartTime]);
+  }, [selectedTeam1, selectedTeam2, team1Score, team2Score, gameHands, waitingForBooks, targetScore, gameStartTime, gameId]);
 
   // Load game state from AsyncStorage
   const loadGameState = useCallback(async () => {
@@ -179,6 +196,7 @@ export default function LiveSpadesScreen() {
         setWaitingForBooks(state.waitingForBooks);
         setTargetScore(state.targetScore);
         setGameStartTime(new Date(state.gameStartTime));
+        setGameId(state.gameId || null);
         setHasRestoredState(true);
       }
     } catch (error) {
@@ -197,17 +215,348 @@ export default function LiveSpadesScreen() {
     }
   }, []);
 
-  // Load saved game state on mount
+  // Create game in database when both teams are selected
+  const createGameInDatabase = useCallback(async (team1: Team, team2: Team) => {
+    if (!user) {
+      console.error('User not logged in');
+      return null;
+    }
+
+    try {
+      const { data: gameData, error: gameError } = await supabase
+        .from('spades_games')
+        .insert({
+          team1_id: team1.id,
+          team2_id: team2.id,
+          goal_score: targetScore,
+          started_at: gameStartTime.toISOString(),
+          status: 'in_progress',
+          created_by: user.id,
+        })
+        .select()
+        .single();
+
+      if (gameError) {
+        console.error('Error creating game:', gameError);
+        return null;
+      }
+
+      return gameData.id;
+    } catch (error) {
+      console.error('Error creating game:', error);
+      return null;
+    }
+  }, [user, targetScore, gameStartTime]);
+
+  // Save/update a hand in the database
+  const saveHandToDatabase = useCallback(async (hand: any, handNumber: number, team1Total: number, team2Total: number) => {
+    if (!gameId) {
+      console.log('No game ID, skipping hand save');
+      return;
+    }
+
+    try {
+      // Check if hand already exists
+      const { data: existingHand, error: fetchError } = await supabase
+        .from('spades_hands')
+        .select('id')
+        .eq('game_id', gameId)
+        .eq('hand_no', handNumber)
+        .maybeSingle();
+
+      if (fetchError) {
+        console.error('Error checking for existing hand:', fetchError);
+        return;
+      }
+
+      const handData = {
+        game_id: gameId,
+        hand_no: handNumber,
+        team1_bid: hand.team1Bid,
+        team2_bid: hand.team2Bid,
+        team1_books: hand.team1Books,
+        team2_books: hand.team2Books,
+        team1_delta: hand.team1Points || 0,
+        team2_delta: hand.team2Points || 0,
+        team1_total_after: team1Total,
+        team2_total_after: team2Total,
+      };
+
+      if (existingHand) {
+        // Update existing hand
+        const { error: updateError } = await supabase
+          .from('spades_hands')
+          .update(handData)
+          .eq('id', existingHand.id);
+
+        if (updateError) {
+          console.error('Error updating hand:', updateError);
+        }
+      } else {
+        // Insert new hand
+        const { error: insertError } = await supabase
+          .from('spades_hands')
+          .insert(handData);
+
+        if (insertError) {
+          console.error('Error inserting hand:', insertError);
+        }
+      }
+    } catch (error) {
+      console.error('Error saving hand to database:', error);
+    }
+  }, [gameId]);
+
+  // Load a game from the database (for spectators)
+  const loadGameFromDatabase = useCallback(async (loadGameId: string) => {
+    try {
+      // Fetch game details
+      const { data: gameData, error: gameError } = await supabase
+        .from('spades_games')
+        .select(`
+          id,
+          team1_id,
+          team2_id,
+          goal_score,
+          started_at,
+          created_by,
+          status,
+          team1:teams!team1_id(id, name),
+          team2:teams!team2_id(id, name)
+        `)
+        .eq('id', loadGameId)
+        .single();
+
+      if (gameError || !gameData) {
+        console.error('Error fetching game:', gameError);
+        Alert.alert('Error', 'Failed to load game');
+        return;
+      }
+
+      // Determine if user can edit
+      const canEdit = user?.id === gameData.created_by;
+      setIsReadOnly(!canEdit);
+      setGameCreatorId(gameData.created_by);
+
+      // Fetch hands
+      const { data: handsData, error: handsError } = await supabase
+        .from('spades_hands')
+        .select('*')
+        .eq('game_id', loadGameId)
+        .order('hand_no', { ascending: true });
+
+      if (handsError) {
+        console.error('Error fetching hands:', handsError);
+      }
+
+      // Set game state
+      const team1 = gameData.team1 as any;
+      const team2 = gameData.team2 as any;
+
+      // Fetch team members
+      const team1Members = await fetchTeamMembers(team1.id);
+      const team2Members = await fetchTeamMembers(team2.id);
+
+      setSelectedTeam1({
+        id: team1.id,
+        name: team1.name,
+        members: team1Members,
+      });
+
+      setSelectedTeam2({
+        id: team2.id,
+        name: team2.name,
+        members: team2Members,
+      });
+
+      setTargetScore(gameData.goal_score || 500);
+      setGameStartTime(new Date(gameData.started_at));
+      setGameId(loadGameId);
+
+      // Convert database hands to app format
+      const convertedHands = handsData?.map((hand: any) => ({
+        team1Bid: hand.team1_bid,
+        team2Bid: hand.team2_bid,
+        team1Books: hand.team1_books,
+        team2Books: hand.team2_books,
+        team1Points: hand.team1_delta,
+        team2Points: hand.team2_delta,
+        team1BlindBid: false, // TODO: Add blind bid tracking to database
+        team2BlindBid: false,
+        status: 'completed',
+      })) || [];
+
+      setGameHands(convertedHands);
+
+      // Calculate current scores
+      let currentTeam1Score = 0;
+      let currentTeam2Score = 0;
+      
+      handsData?.forEach((hand: any) => {
+        currentTeam1Score += hand.team1_delta;
+        currentTeam2Score += hand.team2_delta;
+      });
+
+      setTeam1Score(currentTeam1Score);
+      setTeam2Score(currentTeam2Score);
+
+    } catch (error) {
+      console.error('Error loading game from database:', error);
+      Alert.alert('Error', 'Failed to load game');
+    }
+  }, [user]);
+
+  // Helper function to fetch team members
+  const fetchTeamMembers = async (teamId: string): Promise<string> => {
+    const { data: memberData } = await supabase
+      .from('team_members')
+      .select(`
+        profiles(display_name),
+        team_guests(display_name)
+      `)
+      .eq('team_id', teamId);
+
+    const members: string[] = [];
+    memberData?.forEach((member: any) => {
+      if (member.profiles?.display_name) {
+        members.push(member.profiles.display_name);
+      }
+      if (member.team_guests?.display_name) {
+        members.push(member.team_guests.display_name);
+      }
+    });
+
+    return members.join(' · ');
+  };
+
+  // Fetch all players from both teams with their user IDs
+  const fetchAllPlayersForTransfer = useCallback(async () => {
+    if (!selectedTeam1 || !selectedTeam2) return;
+    
+    setIsLoadingPlayers(true);
+    try {
+      const players: Player[] = [];
+      
+      // Fetch Team 1 members
+      const { data: team1Data } = await supabase
+        .from('team_members')
+        .select(`
+          user_id,
+          profiles!inner(display_name)
+        `)
+        .eq('team_id', selectedTeam1.id)
+        .not('user_id', 'is', null);
+      
+      team1Data?.forEach((member: any) => {
+        if (member.user_id && member.profiles?.display_name) {
+          players.push({
+            userId: member.user_id,
+            displayName: member.profiles.display_name,
+            teamName: selectedTeam1.name,
+          });
+        }
+      });
+      
+      // Fetch Team 2 members
+      const { data: team2Data } = await supabase
+        .from('team_members')
+        .select(`
+          user_id,
+          profiles!inner(display_name)
+        `)
+        .eq('team_id', selectedTeam2.id)
+        .not('user_id', 'is', null);
+      
+      team2Data?.forEach((member: any) => {
+        if (member.user_id && member.profiles?.display_name) {
+          players.push({
+            userId: member.user_id,
+            displayName: member.profiles.display_name,
+            teamName: selectedTeam2.name,
+          });
+        }
+      });
+      
+      setAllPlayers(players);
+    } catch (error) {
+      console.error('Error fetching players:', error);
+      Alert.alert('Error', 'Failed to load players');
+    } finally {
+      setIsLoadingPlayers(false);
+    }
+  }, [selectedTeam1, selectedTeam2]);
+
+  // Load game from URL parameter or saved state on mount
   useEffect(() => {
+    if (urlGameId) {
+      // Load game from database if URL parameter provided
+      loadGameFromDatabase(urlGameId);
+      setIsLoadingState(false);
+    } else {
+      // Load from AsyncStorage if no URL parameter
     loadGameState();
-  }, [loadGameState]);
+    }
+  }, [urlGameId, loadGameFromDatabase, loadGameState]);
 
   // Save game state whenever relevant state changes
   useEffect(() => {
-    if (!isLoadingState) {
+    if (!isLoadingState && !urlGameId) {
+      // Only save to AsyncStorage if not viewing a game via URL
       saveGameState();
     }
-  }, [selectedTeam1, selectedTeam2, team1Score, team2Score, gameHands, waitingForBooks, targetScore, isLoadingState, saveGameState]);
+  }, [selectedTeam1, selectedTeam2, team1Score, team2Score, gameHands, waitingForBooks, targetScore, isLoadingState, urlGameId, saveGameState]);
+
+  // Subscribe to realtime updates for the game
+  useEffect(() => {
+    if (!gameId) return;
+
+    console.log('Setting up realtime subscription for game:', gameId);
+
+    // Subscribe to changes in the spades_hands table and spades_games table for this game
+    const gameSubscription = supabase
+      .channel(`game-updates-${gameId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*', // Listen to all events (INSERT, UPDATE, DELETE)
+          schema: 'public',
+          table: 'spades_hands',
+          filter: `game_id=eq.${gameId}`,
+        },
+        async (payload) => {
+          console.log('Received hand update:', payload);
+          
+          // Reload the full game data to ensure consistency
+          if (urlGameId) {
+            await loadGameFromDatabase(urlGameId);
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'spades_games',
+          filter: `id=eq.${gameId}`,
+        },
+        async (payload) => {
+          console.log('Received game update:', payload);
+          
+          // Reload the full game data when game is updated (e.g., host transfer)
+          if (urlGameId) {
+            await loadGameFromDatabase(urlGameId);
+          }
+        }
+      )
+      .subscribe();
+
+    // Clean up subscription on unmount
+    return () => {
+      console.log('Cleaning up realtime subscription');
+      supabase.removeChannel(gameSubscription);
+    };
+  }, [gameId, urlGameId, loadGameFromDatabase]);
 
   // Fetch teams when component mounts or when coming back to the screen
   useFocusEffect(
@@ -351,7 +700,10 @@ export default function LiveSpadesScreen() {
           : (team1Score > team2Score ? selectedTeam1.id : selectedTeam2.id);
       const completedAt = new Date().toISOString();
 
-      // Insert game record
+      let currentGameId = gameId;
+
+      // If game doesn't exist yet, create it
+      if (!currentGameId) {
       const { data: gameData, error: gameError } = await supabase
         .from('spades_games')
         .insert({
@@ -371,7 +723,23 @@ export default function LiveSpadesScreen() {
         return;
       }
 
-      const gameId = gameData.id;
+        currentGameId = gameData.id;
+      } else {
+        // Update existing game to completed status
+        const { error: updateError } = await supabase
+          .from('spades_games')
+          .update({
+            status: 'completed',
+            ended_at: completedAt,
+          })
+          .eq('id', currentGameId);
+
+        if (updateError) {
+          console.error('Error updating game:', updateError);
+          Alert.alert('Error', 'Failed to update game. Please try again.');
+          return;
+        }
+      }
 
       // Note: Team member snapshot is automatically created by database trigger
       // (trg_snapshot_game_team_members) when the game is inserted
@@ -380,7 +748,7 @@ export default function LiveSpadesScreen() {
       const { error: outcomeError } = await supabase
         .from('spades_game_outcomes')
         .insert({
-          game_id: gameId,
+          game_id: currentGameId,
           team1_id: selectedTeam1.id,
           team2_id: selectedTeam2.id,
           winner_team_id: winnerTeamId,
@@ -408,7 +776,7 @@ export default function LiveSpadesScreen() {
         }
 
         return {
-          game_id: gameId,
+          game_id: currentGameId,
           hand_no: index + 1,
           team1_bid: hand.team1Bid,
           team2_bid: hand.team2Bid,
@@ -542,6 +910,16 @@ export default function LiveSpadesScreen() {
     
     if (team) {
       setSelectedTeam2(team);
+      
+      // Create game in database if team 1 is already selected
+      if (selectedTeam1 && !gameId) {
+        const createdGameId = await createGameInDatabase(selectedTeam1, team);
+        if (createdGameId) {
+          setGameId(createdGameId);
+          console.log('Game created with ID:', createdGameId);
+        }
+      }
+      
       Alert.alert('Team Added', `${team.name} has been set as Team 2!`, [
         {
           text: 'OK',
@@ -666,11 +1044,62 @@ export default function LiveSpadesScreen() {
             setWaitingForBooks(false);
             setTargetScore(500);
             setGameStartTime(new Date());
+            setGameId(null);
             setHasRestoredState(false);
           },
         },
       ]
     );
+  };
+
+  const openTransferHostModal = () => {
+    fetchAllPlayersForTransfer();
+    setShowTransferHostModal(true);
+  };
+
+  const selectPlayerForTransfer = (player: Player) => {
+    setSelectedPlayerForTransfer(player);
+    setShowTransferHostModal(false);
+    setShowTransferConfirmModal(true);
+  };
+
+  const confirmTransferHost = async () => {
+    if (!selectedPlayerForTransfer || !gameId) return;
+    
+    try {
+      // Update the game creator in the database
+      const { error } = await supabase
+        .from('spades_games')
+        .update({ created_by: selectedPlayerForTransfer.userId })
+        .eq('id', gameId);
+      
+      if (error) {
+        console.error('Error transferring host:', error);
+        Alert.alert('Error', 'Failed to transfer host permissions');
+        return;
+      }
+      
+      // Success - update local state
+      setGameCreatorId(selectedPlayerForTransfer.userId);
+      setIsReadOnly(user?.id !== selectedPlayerForTransfer.userId);
+      
+      Alert.alert(
+        'Host Transferred',
+        `${selectedPlayerForTransfer.displayName} is now the game host`,
+        [{ text: 'OK' }]
+      );
+      
+      setShowTransferConfirmModal(false);
+      setSelectedPlayerForTransfer(null);
+    } catch (error) {
+      console.error('Error transferring host:', error);
+      Alert.alert('Error', 'An unexpected error occurred');
+    }
+  };
+
+  const cancelTransferHost = () => {
+    setShowTransferConfirmModal(false);
+    setSelectedPlayerForTransfer(null);
   };
 
   const saveBook = () => {
@@ -727,15 +1156,21 @@ export default function LiveSpadesScreen() {
       status: 'completed'
     };
     
+    const newTeam1Score = team1Score + team1Points;
+    const newTeam2Score = team2Score + team2Points;
+    
     setGameHands(updatedHands);
-    setTeam1Score(prevScore => prevScore + team1Points);
-    setTeam2Score(prevScore => prevScore + team2Points);
+    setTeam1Score(newTeam1Score);
+    setTeam2Score(newTeam2Score);
     setWaitingForBooks(false);
     setTeam1Bid(4);
     setTeam2Bid(4);
     setTeam1Book(0);
     setTeam2Book(0);
     setShowBookModal(false);
+    
+    // Save hand to database
+    saveHandToDatabase(updatedHands[lastHandIndex], lastHandIndex + 1, newTeam1Score, newTeam2Score);
   };
 
   // Show loading screen while state is being loaded
@@ -780,6 +1215,29 @@ export default function LiveSpadesScreen() {
           </View>
         )}
 
+        {/* Spectator Mode Banner */}
+        {isReadOnly && (
+          <View style={styles.spectatorBanner}>
+            <ThemedText style={styles.spectatorBannerText}>
+              👁 SPECTATOR MODE • You're watching this game live
+            </ThemedText>
+          </View>
+        )}
+
+        {/* Transfer Host Button - only show for game creator on live games */}
+        {!isReadOnly && gameId && urlGameId && (
+          <View style={styles.transferHostSection}>
+            <TouchableOpacity 
+              style={styles.transferHostButton}
+              onPress={openTransferHostModal}
+            >
+              <ThemedText style={styles.transferHostButtonText}>
+                Transfer Host Permissions
+              </ThemedText>
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* Team 1 Section */}
         <View style={styles.section}>
           <ThemedText style={styles.sectionLabel}>TEAM 1</ThemedText>
@@ -791,11 +1249,12 @@ export default function LiveSpadesScreen() {
           ) : selectedTeam1 ? (
             <TouchableOpacity 
               style={styles.teamCard}
-              onPress={() => setShowTeamSelection(true)}
+              onPress={() => !isReadOnly && setShowTeamSelection(true)}
+              disabled={isReadOnly}
             >
               <ThemedText style={styles.teamName}>{selectedTeam1.name}</ThemedText>
               <ThemedText style={styles.teamMembers}>{selectedTeam1.members}</ThemedText>
-              <ThemedText style={styles.tapToChangeText}>Tap to select a different team</ThemedText>
+              {!isReadOnly && <ThemedText style={styles.tapToChangeText}>Tap to select a different team</ThemedText>}
             </TouchableOpacity>
           ) : availableTeams.length > 0 ? (
             <View style={styles.teamCard}>
@@ -824,13 +1283,14 @@ export default function LiveSpadesScreen() {
           {selectedTeam2 ? (
             <TouchableOpacity 
               style={styles.teamCard}
-              onPress={scanTeamQR}
+              onPress={() => !isReadOnly && scanTeamQR()}
+              disabled={isReadOnly}
             >
               <ThemedText style={styles.teamName}>{selectedTeam2.name}</ThemedText>
               <ThemedText style={styles.teamMembers}>{selectedTeam2.members}</ThemedText>
-              <ThemedText style={styles.tapToChangeText}>Tap to scan a different team</ThemedText>
+              {!isReadOnly && <ThemedText style={styles.tapToChangeText}>Tap to scan a different team</ThemedText>}
             </TouchableOpacity>
-          ) : (
+          ) : !isReadOnly ? (
             <View style={styles.teamCard}>
               <ThemedText style={styles.teamInstructions}>
                 Scan the team QR from its details page to set the opponent.
@@ -838,6 +1298,12 @@ export default function LiveSpadesScreen() {
               <TouchableOpacity style={styles.scanQRButton} onPress={scanTeamQR}>
                 <ThemedText style={styles.scanQRButtonText}>Scan Team QR</ThemedText>
               </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={styles.teamCard}>
+              <ThemedText style={styles.teamInstructions}>
+                Waiting for teams to be selected...
+              </ThemedText>
             </View>
           )}
         </View>
@@ -849,6 +1315,7 @@ export default function LiveSpadesScreen() {
             <TouchableOpacity 
               style={styles.targetScorePill}
               onPress={openTargetScoreModal}
+              disabled={isReadOnly}
             >
               <ThemedText style={styles.targetScoreText}>{targetScore} pts</ThemedText>
             </TouchableOpacity>
@@ -879,7 +1346,7 @@ export default function LiveSpadesScreen() {
             ) : (
               <View style={styles.handsList}>
                 {gameHands.map((hand, index) => (
-                  <View key={hand.id} style={styles.handItem}>
+                  <View key={index} style={styles.handItem}>
                     <ThemedText style={styles.handNumber}>Hand {index + 1}</ThemedText>
                     <View style={styles.handDetails}>
                       <View style={styles.handTeamRow}>
@@ -946,6 +1413,7 @@ export default function LiveSpadesScreen() {
         </View>
 
         {/* Action Buttons */}
+        {!isReadOnly && (
         <View style={styles.actionButtons}>
           <View style={styles.topButtons}>
             <TouchableOpacity style={styles.addHandButton} onPress={addHand}>
@@ -971,6 +1439,7 @@ export default function LiveSpadesScreen() {
             )}
           </TouchableOpacity>
         </View>
+        )}
       </ScrollView>
 
       {/* Team Selection Modal */}
@@ -1316,6 +1785,96 @@ export default function LiveSpadesScreen() {
           </CameraView>
         </View>
       </Modal>
+
+      {/* Transfer Host Modal */}
+      <Modal
+        visible={showTransferHostModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowTransferHostModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <ThemedText style={styles.modalTitle}>Transfer Host</ThemedText>
+              <TouchableOpacity
+                style={styles.modalCloseButton}
+                onPress={() => setShowTransferHostModal(false)}
+              >
+                <ThemedText style={styles.modalCloseButtonText}>✕</ThemedText>
+              </TouchableOpacity>
+            </View>
+            
+            <ThemedText style={styles.transferHostDescription}>
+              Select a player to transfer host permissions to:
+            </ThemedText>
+            
+            {isLoadingPlayers ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="small" color="#EF4444" />
+                <ThemedText style={styles.loadingText}>Loading players...</ThemedText>
+              </View>
+            ) : (
+              <ScrollView style={styles.playersList}>
+                {allPlayers.map((player) => (
+                  <TouchableOpacity
+                    key={player.userId}
+                    style={[
+                      styles.playerOption,
+                      player.userId === user?.id && styles.playerOptionCurrent
+                    ]}
+                    onPress={() => selectPlayerForTransfer(player)}
+                  >
+                    <View>
+                      <ThemedText style={styles.playerOptionName}>
+                        {player.displayName}
+                        {player.userId === user?.id && ' (You)'}
+                      </ThemedText>
+                      <ThemedText style={styles.playerOptionTeam}>
+                        {player.teamName}
+                      </ThemedText>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Transfer Host Confirmation Modal */}
+      <Modal
+        visible={showTransferConfirmModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={cancelTransferHost}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.confirmModalContent}>
+            <ThemedText style={styles.modalTitle}>Are you sure?</ThemedText>
+            <ThemedText style={styles.confirmModalText}>
+              Transfer host permissions to {selectedPlayerForTransfer?.displayName}?
+              {'\n\n'}
+              You will lose the ability to edit this game.
+            </ThemedText>
+            
+            <View style={styles.bidModalActions}>
+              <TouchableOpacity 
+                style={styles.cancelButton}
+                onPress={cancelTransferHost}
+              >
+                <ThemedText style={styles.cancelButtonText}>Cancel</ThemedText>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.saveButton}
+                onPress={confirmTransferHost}
+              >
+                <ThemedText style={styles.saveButtonText}>Confirm</ThemedText>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ThemedView>
   );
 }
@@ -1405,6 +1964,21 @@ const styles = StyleSheet.create({
   },
   restoredBannerText: {
     color: '#22C55E',
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  spectatorBanner: {
+    backgroundColor: '#1A1A3A',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: '#4A90E2',
+  },
+  spectatorBannerText: {
+    color: '#4A90E2',
     fontSize: 14,
     fontWeight: '600',
     textAlign: 'center',
@@ -1889,5 +2463,51 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '700',
     color: '#ECEDEE',
+  },
+  transferHostSection: {
+    marginBottom: 24,
+  },
+  transferHostButton: {
+    backgroundColor: '#1A1A24',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#EF4444',
+  },
+  transferHostButtonText: {
+    color: '#EF4444',
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  transferHostDescription: {
+    fontSize: 14,
+    color: '#9BA1A6',
+    marginBottom: 16,
+    lineHeight: 20,
+  },
+  playersList: {
+    maxHeight: 300,
+  },
+  playerOption: {
+    backgroundColor: '#2A2A2A',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+  playerOptionCurrent: {
+    borderWidth: 1,
+    borderColor: '#4A90E2',
+  },
+  playerOptionName: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#ECEDEE',
+    marginBottom: 4,
+  },
+  playerOptionTeam: {
+    fontSize: 14,
+    color: '#9BA1A6',
   },
 });
