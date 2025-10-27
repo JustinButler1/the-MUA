@@ -85,6 +85,12 @@ export default function LiveSpadesScreen() {
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
   const [selectedPlayerForTransfer, setSelectedPlayerForTransfer] = useState<Player | null>(null);
   const [isLoadingPlayers, setIsLoadingPlayers] = useState(false);
+  
+  // Keep a ref to the current gameId for use in realtime callbacks
+  const gameIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    gameIdRef.current = gameId;
+  }, [gameId]);
 
   const fetchTeams = useCallback(async () => {
     if (!user) {
@@ -501,7 +507,8 @@ export default function LiveSpadesScreen() {
       // Load from AsyncStorage if no URL parameter
     loadGameState();
     }
-  }, [urlGameId, loadGameFromDatabase, loadGameState]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlGameId]);
 
   // Save game state whenever relevant state changes
   useEffect(() => {
@@ -538,21 +545,27 @@ export default function LiveSpadesScreen() {
           });
           console.log('Received hand update:', payload);
           // Handle different event types
+          const currentGameId = gameIdRef.current;
+          if (!currentGameId) {
+            console.log('No game ID available, skipping update');
+            return;
+          }
+          
           if (payload.eventType === 'DELETE') {
             // When a hand is deleted, we need to refresh the game state
             console.log('Hand deleted, refreshing game state. Old record:', payload.old);
             console.log('Loading game from database after DELETE event');
-            await loadGameFromDatabase(gameId);
+            await loadGameFromDatabase(currentGameId);
           } else if (payload.eventType === 'INSERT') {
             // New hand added
             console.log('New hand added, refreshing game state. New record:', payload.new);
             console.log('Loading game from database after INSERT event');
-            await loadGameFromDatabase(gameId);
+            await loadGameFromDatabase(currentGameId);
           } else if (payload.eventType === 'UPDATE') {
             // Hand updated (books added or bid modified)
             console.log('Hand updated, refreshing game state. Old:', payload.old, 'New:', payload.new);
             console.log('Loading game from database after UPDATE event');
-            await loadGameFromDatabase(gameId);
+            await loadGameFromDatabase(currentGameId);
           }
         }
       )
@@ -573,8 +586,13 @@ export default function LiveSpadesScreen() {
           }
           
           // Reload the full game data when game is updated (e.g., host transfer)
+          const currentGameId = gameIdRef.current;
+          if (!currentGameId) {
+            console.log('No game ID available, skipping update');
+            return;
+          }
           console.log('Loading game from database after game update');
-          await loadGameFromDatabase(gameId);
+          await loadGameFromDatabase(currentGameId);
         }
       )
       .subscribe((status) => {
@@ -594,7 +612,8 @@ export default function LiveSpadesScreen() {
       console.log('Cleaning up realtime subscription');
       supabase.removeChannel(gameSubscription);
     };
-  }, [gameId, loadGameFromDatabase]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameId]);
 
   // Fetch teams when component mounts or when coming back to the screen
   useFocusEffect(
