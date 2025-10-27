@@ -10,6 +10,7 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Modal, ScrollView, StatusBar, StyleSheet, Switch, TouchableOpacity, View } from 'react-native';
+import QRCode from 'react-native-qrcode-svg';
 
 interface Team {
   id: string;
@@ -57,6 +58,7 @@ export default function LiveSpadesScreen() {
   const [showUndoModal, setShowUndoModal] = useState(false);
   const [showTargetScoreModal, setShowTargetScoreModal] = useState(false);
   const [showQRScanner, setShowQRScanner] = useState(false);
+  const [showQRModal, setShowQRModal] = useState(false);
   const [team1Bid, setTeam1Bid] = useState(4);
   const [team2Bid, setTeam2Bid] = useState(4);
   const [team1BlindBid, setTeam1BlindBid] = useState(false);
@@ -1407,6 +1409,20 @@ export default function LiveSpadesScreen() {
           </View>
         )}
 
+        {/* QR Code Button - Show for all users when game is active */}
+        {gameId && selectedTeam1 && selectedTeam2 && (
+          <View style={styles.qrButtonSection}>
+            <TouchableOpacity 
+              style={styles.qrButton}
+              onPress={() => setShowQRModal(true)}
+            >
+              <ThemedText style={styles.qrButtonText}>
+                📱 Share Game QR
+              </ThemedText>
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* Transfer Host Button - only show for game creator on live games */}
         {!isReadOnly && gameId && urlGameId && (
           <View style={styles.transferHostSection}>
@@ -2072,6 +2088,58 @@ export default function LiveSpadesScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* QR Code Modal */}
+      <Modal
+        visible={showQRModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowQRModal(false)}
+      >
+        <TouchableOpacity 
+          style={styles.modalOverlay} 
+          activeOpacity={1}
+          onPress={() => setShowQRModal(false)}
+        >
+          <View style={styles.qrModalContent}>
+            <TouchableOpacity 
+              style={styles.qrModalInner}
+              activeOpacity={1}
+              onPress={(e) => e.stopPropagation()}
+            >
+              <ThemedText style={styles.qrModalTitle}>Game QR Code</ThemedText>
+              <ThemedText style={styles.qrModalSubtitle}>
+                {selectedTeam1?.name} vs {selectedTeam2?.name}
+              </ThemedText>
+              
+              <View style={styles.qrCodeContainer}>
+                <QRCode
+                  value={JSON.stringify({ 
+                    type: 'game_spectator', 
+                    gameId: gameId,
+                    team1Name: selectedTeam1?.name,
+                    team2Name: selectedTeam2?.name
+                  })}
+                  size={240}
+                  backgroundColor="white"
+                  color="black"
+                />
+              </View>
+              
+              <ThemedText style={styles.qrModalDescription}>
+                Share this QR code with anyone to let them watch this game live
+              </ThemedText>
+              
+              <TouchableOpacity 
+                style={styles.closeButton}
+                onPress={() => setShowQRModal(false)}
+              >
+                <ThemedText style={styles.closeButtonText}>Close</ThemedText>
+              </TouchableOpacity>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </ThemedView>
   );
 }
@@ -2723,5 +2791,77 @@ const styles = StyleSheet.create({
   playerOptionTeam: {
     fontSize: 14,
     color: '#9BA1A6',
+  },
+  // QR Button styles
+  qrButtonSection: {
+    marginBottom: 24,
+  },
+  qrButton: {
+    backgroundColor: '#1A1A24',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#4A90E2',
+    alignItems: 'center',
+  },
+  qrButtonText: {
+    color: '#4A90E2',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  // QR Modal styles
+  qrModalContent: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  qrModalInner: {
+    backgroundColor: '#1A1A24',
+    borderRadius: 16,
+    padding: 24,
+    width: '100%',
+    maxWidth: 320,
+    alignItems: 'center',
+  },
+  qrModalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#ECEDEE',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  qrModalSubtitle: {
+    fontSize: 16,
+    color: '#9BA1A6',
+    marginBottom: 24,
+    textAlign: 'center',
+  },
+  qrCodeContainer: {
+    backgroundColor: 'white',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 24,
+  },
+  qrModalDescription: {
+    fontSize: 14,
+    color: '#9BA1A6',
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 20,
+  },
+  closeButton: {
+    backgroundColor: '#EF4444',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    width: '100%',
+  },
+  closeButtonText: {
+    color: '#ECEDEE',
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
   },
 });

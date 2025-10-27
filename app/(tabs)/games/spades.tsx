@@ -4,9 +4,10 @@ import { Colors } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, ScrollView, StatusBar, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Alert, Modal, ScrollView, StatusBar, StyleSheet, TouchableOpacity, View } from 'react-native';
 
 // Types for team and game data
 interface Team {
@@ -45,6 +46,11 @@ export default function SpadesScreen() {
   const [isLoadingTeams, setIsLoadingTeams] = useState(true);
   const [isLoadingGames, setIsLoadingGames] = useState(true);
   const [isLoadingLiveGames, setIsLoadingLiveGames] = useState(true);
+  const [showQRScanner, setShowQRScanner] = useState(false);
+  const [permission, requestPermission] = useCameraPermissions();
+  const [hasScanned, setHasScanned] = useState(false);
+  const scanningRef = useRef(false);
+  const lastScanTimeRef = useRef(0);
 
   const fetchTeams = useCallback(async () => {
     if (!user) {
@@ -339,6 +345,68 @@ export default function SpadesScreen() {
     };
   }, [user, fetchLiveGames, fetchGames]);
 
+  // QR Scanner functions
+  const scanGameQR = async () => {
+    if (!permission) {
+      // Request permission if we don't have it yet
+      const result = await requestPermission();
+      if (!result.granted) {
+        Alert.alert('Permission Required', 'Camera permission is required to scan QR codes.');
+        return;
+      }
+    } else if (!permission.granted) {
+      const result = await requestPermission();
+      if (!result.granted) {
+        Alert.alert('Permission Required', 'Camera permission is required to scan QR codes.');
+        return;
+      }
+    }
+    
+    setHasScanned(false);
+    scanningRef.current = false;
+    lastScanTimeRef.current = 0;
+    setShowQRScanner(true);
+  };
+
+  const handleBarcodeScanned = async ({ data }: { type: string; data: string }) => {
+    // Immediate synchronous check to prevent concurrent scans
+    if (scanningRef.current) return;
+    
+    // Debounce: require at least 2 seconds between scans
+    const now = Date.now();
+    if (now - lastScanTimeRef.current < 2000) return;
+    
+    // Mark as scanning immediately (synchronous)
+    scanningRef.current = true;
+    lastScanTimeRef.current = now;
+    setHasScanned(true);
+    
+    try {
+      // Try to parse as JSON
+      const parsed = JSON.parse(data);
+      if (parsed.type === 'game_spectator' && parsed.gameId) {
+        // Navigate to the live game
+        setShowQRScanner(false);
+        router.push({ pathname: '/games/live', params: { gameId: parsed.gameId } } as any);
+      } else {
+        Alert.alert('Invalid QR Code', 'This QR code is not a valid game spectator code.', [
+          {
+            text: 'OK',
+            onPress: () => setShowQRScanner(false),
+          },
+        ]);
+      }
+    } catch (error) {
+      console.error('Error parsing QR code:', error);
+      Alert.alert('Invalid QR Code', 'This QR code is not valid or does not belong to a game.', [
+        {
+          text: 'OK',
+          onPress: () => setShowQRScanner(false),
+        },
+      ]);
+    }
+  };
+
   // Refresh data when screen comes into focus (e.g., returning from create-team)
   useFocusEffect(
     useCallback(() => {
@@ -372,6 +440,14 @@ export default function SpadesScreen() {
           onPress={() => router.push('/teams/create' as any)}
         >
           <ThemedText style={styles.createTeamButtonText}>Create Team</ThemedText>
+        </TouchableOpacity>
+
+        {/* Watch Live Game Button */}
+        <TouchableOpacity 
+          style={styles.watchLiveButton}
+          onPress={scanGameQR}
+        >
+          <ThemedText style={styles.watchLiveButtonText}>📱 Watch Live Game</ThemedText>
         </TouchableOpacity>
 
         {/* Live Games Section */}
@@ -492,6 +568,42 @@ export default function SpadesScreen() {
       >
         <ThemedText style={styles.addGameButtonText}>Add Spades Game</ThemedText>
       </TouchableOpacity>
+
+      {/* QR Scanner Modal */}
+      <Modal
+        visible={showQRScanner}
+        transparent={false}
+        animationType="slide"
+        onRequestClose={() => setShowQRScanner(false)}
+      >
+        <View style={styles.scannerContainer}>
+          <View style={styles.scannerHeader}>
+            <ThemedText style={styles.scannerTitle}>Scan Game QR Code</ThemedText>
+            <TouchableOpacity
+              style={styles.closeScannerButton}
+              onPress={() => setShowQRScanner(false)}
+            >
+              <ThemedText style={styles.closeScannerButtonText}>✕</ThemedText>
+            </TouchableOpacity>
+          </View>
+          
+          <CameraView
+            style={styles.camera}
+            facing="back"
+            onBarcodeScanned={hasScanned ? undefined : handleBarcodeScanned}
+            barcodeScannerSettings={{
+              barcodeTypes: ['qr'],
+            }}
+          >
+            <View style={styles.scannerOverlay}>
+              <View style={styles.scannerFrame} />
+              <ThemedText style={styles.scannerInstructions}>
+                Position the game QR code within the frame
+              </ThemedText>
+            </View>
+          </CameraView>
+        </View>
+      </Modal>
     </ThemedView>
   );
 }
@@ -721,5 +833,77 @@ const styles = StyleSheet.create({
   liveGoal: {
     fontSize: 14,
     color: '#9BA1A6',
+  },
+  // Watch Live Button styles
+  watchLiveButton: {
+    backgroundColor: '#1A1A24',
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: '#4A90E2',
+  },
+  watchLiveButtonText: {
+    color: '#4A90E2',
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  // QR Scanner styles
+  scannerContainer: {
+    flex: 1,
+    backgroundColor: '#0A0A0F',
+  },
+  scannerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 60,
+    paddingBottom: 20,
+    backgroundColor: '#0A0A0F',
+  },
+  scannerTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#ECEDEE',
+  },
+  closeScannerButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#1A1A24',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  closeScannerButtonText: {
+    fontSize: 24,
+    color: '#ECEDEE',
+    fontWeight: '600',
+  },
+  camera: {
+    flex: 1,
+  },
+  scannerOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  scannerFrame: {
+    width: 250,
+    height: 250,
+    borderWidth: 3,
+    borderColor: '#4A90E2',
+    borderRadius: 12,
+    backgroundColor: 'transparent',
+  },
+  scannerInstructions: {
+    fontSize: 16,
+    color: '#ECEDEE',
+    marginTop: 24,
+    textAlign: 'center',
+    paddingHorizontal: 40,
   },
 });
