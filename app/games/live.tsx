@@ -505,7 +505,7 @@ export default function LiveSpadesScreen() {
       setIsLoadingState(false);
     } else {
       // Load from AsyncStorage if no URL parameter
-    loadGameState();
+      loadGameState();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [urlGameId]);
@@ -514,7 +514,10 @@ export default function LiveSpadesScreen() {
   useEffect(() => {
     if (!isLoadingState && !urlGameId) {
       // Only save to AsyncStorage if not viewing a game via URL
-      saveGameState();
+      // Don't save if game has been deleted (no selected teams)
+      if (selectedTeam1 || selectedTeam2) {
+        saveGameState();
+      }
     }
   }, [selectedTeam1, selectedTeam2, team1Score, team2Score, gameHands, waitingForBooks, targetScore, isLoadingState, urlGameId, saveGameState]);
 
@@ -1293,6 +1296,28 @@ export default function LiveSpadesScreen() {
               const result = await deleteGame(gameId, user.id);
               
               if (result.success) {
+                // Clear AsyncStorage first
+                await clearGameState();
+                
+                // Reset all local state to prevent stale data
+                setSelectedTeam1(null);
+                setSelectedTeam2(null);
+                setTeam1Score(0);
+                setTeam2Score(0);
+                setGameHands([]);
+                setWaitingForBooks(false);
+                setTargetScore(500);
+                setGameStartTime(new Date());
+                setGameId(null);
+                setHasRestoredState(false);
+                
+                // Explicitly clear AsyncStorage again to be sure
+                try {
+                  await AsyncStorage.removeItem(GAME_STATE_KEY);
+                } catch (e) {
+                  console.error('Error clearing AsyncStorage:', e);
+                }
+                
                 Alert.alert(
                   'Game Deleted',
                   'The game has been successfully deleted.',
