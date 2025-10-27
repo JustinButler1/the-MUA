@@ -515,7 +515,7 @@ export default function LiveSpadesScreen() {
   useEffect(() => {
     if (!gameId) return;
 
-    console.log('CUSTOM LOG: Setting up realtime subscription for game:', gameId);
+    console.log('Setting up realtime subscription for game:', gameId);
 
     // Subscribe to changes in the spades_hands table and spades_games table for this game
     const gameSubscription = supabase
@@ -536,7 +536,7 @@ export default function LiveSpadesScreen() {
             old: payload.old,
             new: payload.new
           });
-          console.log('CUSTOM LOG: Received hand update:', payload);
+          console.log('Received hand update:', payload);
           // Handle different event types
           if (payload.eventType === 'DELETE') {
             // When a hand is deleted, we need to refresh the game state
@@ -578,14 +578,14 @@ export default function LiveSpadesScreen() {
         }
       )
       .subscribe((status) => {
-        console.log('CUSTOM LOG: Realtime subscription status:', status);
+        console.log('Realtime subscription status:', status);
         if (status === 'SUBSCRIBED') {
-          console.log('CUSTOM LOG: Successfully subscribed to realtime updates for game:', gameId);
-          console.log('CUSTOM LOG: Subscription channel:', `game-updates-${gameId}`);
+          console.log('Successfully subscribed to realtime updates for game:', gameId);
+          console.log('Subscription channel:', `game-updates-${gameId}`);
         } else if (status === 'CHANNEL_ERROR') {
-          console.error('CUSTOM LOG: Error subscribing to realtime updates for game:', gameId);
+          console.error('Error subscribing to realtime updates for game:', gameId);
         } else {
-          console.log('CUSTOM LOG: Subscription status changed to:', status);
+          console.log('Subscription status changed to:', status);
         }
       });
 
@@ -684,7 +684,7 @@ export default function LiveSpadesScreen() {
       // Delete the hand from database
       if (gameId) {
         try {
-          console.log(`CUSTOM LOG: About to delete hand ${handNumberToDelete} from database for game ${gameId}`);
+          console.log(`About to delete hand ${handNumberToDelete} from database for game ${gameId}`);
           const { error, data } = await supabase
             .from('spades_hands')
             .delete()
@@ -693,18 +693,18 @@ export default function LiveSpadesScreen() {
             .select(); // Add select to see what was deleted
           
           if (error) {
-            console.error('CUSTOM LOG: Error deleting hand from database:', error);
+            console.error('Error deleting hand from database:', error);
           } else {
-            console.log('CUSTOM LOG: Successfully deleted hand from database. Deleted data:', data);
-            console.log('CUSTOM LOG: This should trigger a realtime DELETE event');
+            console.log('Successfully deleted hand from database. Deleted data:', data);
+            console.log('This should trigger a realtime DELETE event');
             
             // Check if subscription is active
             const channel = supabase.getChannels().find(ch => ch.topic === `game-updates-${gameId}`);
-            console.log('CUSTOM LOG: Current subscription status:', channel?.state);
+            console.log('Current subscription status:', channel?.state);
             
             // Fallback: If realtime doesn't work, we can trigger a manual refresh
             // by updating a dummy field in the game record to force a realtime event
-            console.log('CUSTOM LOG: Triggering fallback realtime event via game update');
+            console.log('Triggering fallback realtime event via game update');
             try {
               const { error: fallbackError } = await supabase
                 .from('spades_games')
@@ -714,21 +714,21 @@ export default function LiveSpadesScreen() {
                 .eq('id', gameId);
               
               if (fallbackError) {
-                console.error('CUSTOM LOG: Fallback realtime trigger failed:', fallbackError);
+                console.error('Fallback realtime trigger failed:', fallbackError);
               } else {
-                console.log('CUSTOM LOG: Fallback realtime trigger successful');
+                console.log('Fallback realtime trigger successful');
               }
             } catch (fallbackErr) {
-              console.error('CUSTOM LOG: Fallback realtime trigger error:', fallbackErr);
+              console.error('Fallback realtime trigger error:', fallbackErr);
             }
             
             // Small delay to ensure the realtime event is processed
             setTimeout(() => {
-              console.log('CUSTOM LOG: Realtime event should have been processed by now');
+              console.log('Realtime event should have been processed by now');
             }, 100);
           }
         } catch (error) {
-          console.error('CUSTOM LOG: Error deleting hand from database:', error);
+          console.error('Error deleting hand from database:', error);
         }
       }
       
@@ -1320,7 +1320,13 @@ export default function LiveSpadesScreen() {
     }
     
     // Calculate scores for each team
-    const calculateScore = (bid: number, books: number, isBlind: boolean) => {
+    const calculateScore = (bid: number | null, books: number, isBlind: boolean) => {
+      // Special case: First hand with null bids (bids itself)
+      if (bid === null) {
+        // For first hand, each book is worth 10 points
+        return books * 10;
+      }
+      
       // Special case: Bid of 0
       if (bid === 0) {
         if (books === 0) {

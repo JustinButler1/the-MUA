@@ -14,7 +14,7 @@ export default function GamesScreen() {
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* ARENA Badge */}
         <View style={styles.arenaBadge}>
-          <ThemedText style={styles.arenaText}>ARENAS</ThemedText>
+          <ThemedText style={styles.arenaText}>ARENA</ThemedText>
         </View>
         
         {/* Title */}
