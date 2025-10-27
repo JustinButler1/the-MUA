@@ -622,7 +622,15 @@ export default function LiveSpadesScreen() {
       }
       setShowBookModal(true);
     } else {
-      setShowBidModal(true);
+      // Check if this is the first hand
+      if (gameHands.length === 0) {
+        // First hand: skip bidding and go directly to books with default values
+        setTeam1Book(6);
+        setTeam2Book(7);
+        setShowBookModal(true);
+      } else {
+        setShowBidModal(true);
+      }
     }
   };
 
@@ -1136,6 +1144,8 @@ export default function LiveSpadesScreen() {
 
   const saveBid = async () => {
     // Create new hand entry with bids
+    setTeam1Bid((team1Bid) ? team1Bid : team1Book);
+    setTeam2Bid((team2Bid) ? team2Bid : team2Book);
     const newHand = {
       id: Date.now(),
       team1Bid,
@@ -1288,10 +1298,26 @@ export default function LiveSpadesScreen() {
   };
 
   const saveBook = () => {
-    // Update the last hand with book values
-    const updatedHands = [...gameHands];
-    const lastHandIndex = updatedHands.length - 1;
-    const lastHand = updatedHands[lastHandIndex];
+    let updatedHands = [...gameHands];
+    let lastHandIndex = updatedHands.length - 1;
+    let lastHand = updatedHands[lastHandIndex];
+    
+    // If this is the first hand and we're going directly to books (no bids set), create a new hand
+    if (gameHands.length === 0) {
+      const newHand = {
+        id: Date.now(),
+        team1Bid: null, // Default bid for first hand
+        team2Bid: null, // Default bid for first hand
+        team1BlindBid: false,
+        team2BlindBid: false,
+        team1Books: null,
+        team2Books: null,
+        status: 'waiting_for_books'
+      };
+      updatedHands = [newHand];
+      lastHandIndex = 0;
+      lastHand = newHand;
+    }
     
     // Calculate scores for each team
     const calculateScore = (bid: number, books: number, isBlind: boolean) => {
@@ -1553,7 +1579,7 @@ export default function LiveSpadesScreen() {
               <View style={styles.emptyHands}>
                 <ThemedText style={styles.emptyHandsTitle}>No hands yet</ThemedText>
                 <ThemedText style={styles.emptyHandsDescription}>
-                  Tap 'Add Bid' to capture bids and books for each round.
+                  Tap 'Add Hand' to start the first round (first round bids itself).
                 </ThemedText>
               </View>
             ) : (
@@ -1565,12 +1591,12 @@ export default function LiveSpadesScreen() {
                       <View style={styles.handTeamRow}>
                         <ThemedText style={styles.handLabel}>{selectedTeam1?.name || 'Team 1'} Bid:</ThemedText>
                         <View style={styles.handBidValue}>
-                          <ThemedText style={styles.handValue}>{hand.team1Bid}</ThemedText>
                           {hand.team1BlindBid && (
                             <View style={styles.blindBadge}>
                               <ThemedText style={styles.blindBadgeText}>BLIND</ThemedText>
                             </View>
                           )}
+                          <ThemedText style={styles.handValue}>{hand.team1Bid}</ThemedText>
                         </View>
                       </View>
                       <View style={styles.handTeamRow}>
@@ -1631,7 +1657,7 @@ export default function LiveSpadesScreen() {
           <View style={styles.topButtons}>
             <TouchableOpacity style={styles.addHandButton} onPress={addHand}>
               <ThemedText style={styles.addHandButtonText}>
-                {waitingForBooks ? 'Add Book' : 'Add Bid'}
+                {waitingForBooks ? 'Add Book' : (gameHands.length === 0 ? 'Add Hand' : 'Add Bid')}
               </ThemedText>
             </TouchableOpacity>
             
