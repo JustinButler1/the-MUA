@@ -1602,12 +1602,12 @@ export default function LiveSpadesScreen() {
                       <View style={styles.handTeamRow}>
                         <ThemedText style={styles.handLabel}>{selectedTeam2?.name || 'Team 2'} Bid:</ThemedText>
                         <View style={styles.handBidValue}>
-                          <ThemedText style={styles.handValue}>{hand.team2Bid}</ThemedText>
                           {hand.team2BlindBid && (
                             <View style={styles.blindBadge}>
                               <ThemedText style={styles.blindBadgeText}>BLIND</ThemedText>
                             </View>
                           )}
+                          <ThemedText style={styles.handValue}>{hand.team2Bid}</ThemedText>
                         </View>
                       </View>
                       {hand.status === 'waiting_for_books' ? (

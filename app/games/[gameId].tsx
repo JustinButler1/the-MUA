@@ -1,3 +1,4 @@
+import { SpadesGameSummary } from '@/components/spades-game-summary';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Colors } from '@/constants/theme';
@@ -249,36 +250,14 @@ export default function GameDetailsScreen() {
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* Game Summary Card */}
-        <View style={styles.gameSummaryCard}>
-          <View style={styles.teamsHeader}>
-            <View style={[styles.teamPill, { backgroundColor: '#8B4513' }]}>
-              <ThemedText style={styles.teamPillText}>{gameDetails.team1}</ThemedText>
-            </View>
-            <ThemedText style={styles.vsText}>VS</ThemedText>
-            <View style={[styles.teamPill, { backgroundColor: '#2A1A2A' }]}>
-              <ThemedText style={styles.teamPillText}>{gameDetails.team2}</ThemedText>
-            </View>
-          </View>
-          
-          <View style={styles.gameInfo}>
-            <View style={styles.infoRow}>
-              <ThemedText style={styles.infoLabel}>FINAL SCORE</ThemedText>
-              <ThemedText style={styles.infoValue}>{gameDetails.finalScore}</ThemedText>
-            </View>
-            <View style={styles.infoRow}>
-              <ThemedText style={styles.infoLabel}>GOAL</ThemedText>
-              <ThemedText style={styles.infoValue}>{gameDetails.goal}</ThemedText>
-            </View>
-            <View style={styles.infoRow}>
-              <ThemedText style={styles.infoLabel}>STARTED</ThemedText>
-              <ThemedText style={styles.infoValue}>{gameDetails.started}</ThemedText>
-            </View>
-            <View style={styles.infoRow}>
-              <ThemedText style={styles.infoLabel}>ENDED</ThemedText>
-              <ThemedText style={styles.infoValue}>{gameDetails.ended}</ThemedText>
-            </View>
-          </View>
-        </View>
+        <SpadesGameSummary
+          team1={gameDetails.team1}
+          team2={gameDetails.team2}
+          finalScore={gameDetails.finalScore}
+          goal={gameDetails.goal}
+          started={gameDetails.started}
+          ended={gameDetails.ended}
+        />
 
         {/* Delete Game Button - only show for users with edit permissions */}
         {canDelete && (
@@ -371,55 +350,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 40,
     paddingTop: 30,
-  },
-  gameSummaryCard: {
-    backgroundColor: '#1A1A24',
-    padding: 20,
-    borderRadius: 16,
-    marginBottom: 32,
-  },
-  teamsHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 20,
-  },
-  teamPill: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    flex: 1,
-    marginHorizontal: 4,
-  },
-  teamPillText: {
-    color: '#ECEDEE',
-    fontSize: 14,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  vsText: {
-    color: '#ECEDEE',
-    fontSize: 16,
-    fontWeight: '700',
-    marginHorizontal: 12,
-  },
-  gameInfo: {
-    gap: 12,
-  },
-  infoRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  infoLabel: {
-    fontSize: 14,
-    color: '#9BA1A6',
-    fontWeight: '500',
-  },
-  infoValue: {
-    fontSize: 14,
-    color: '#ECEDEE',
-    fontWeight: '600',
   },
   sectionTitle: {
     fontSize: 20,

@@ -1,3 +1,4 @@
+import { TeamCard } from '@/components/team-card';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Colors } from '@/constants/theme';
@@ -59,42 +60,72 @@ export default function SpadesScreen() {
     }
 
     try {
-      // Fetch teams where user is a member
-      const { data: teamMembers, error: teamError } = await supabase
+      // First, get teams where user is a member
+      const { data: userTeams, error: userTeamsError } = await supabase
         .from('team_members')
-        .select(`
-          team_id,
-          teams!inner(id, name),
-          profiles(display_name),
-          team_guests(display_name)
-        `)
+        .select('team_id')
         .eq('user_id', user.id);
 
-      if (teamError) {
-        console.error('Error fetching teams:', teamError);
+      if (userTeamsError) {
+        console.error('Error fetching user teams:', userTeamsError);
         Alert.alert('Error', 'Failed to load teams');
         return;
       }
 
-      // Process team data
-      const processedTeams: Team[] = teamMembers?.map((member: any) => {
+      if (!userTeams || userTeams.length === 0) {
+        setTeams([]);
+        return;
+      }
+
+      // Get all members for each team
+      const teamIds = userTeams.map(t => t.team_id);
+      const { data: allTeamMembers, error: teamMembersError } = await supabase
+        .from('team_members')
+        .select(`
+          team_id,
+          slot,
+          teams!inner(id, name),
+          profiles(display_name),
+          team_guests(display_name)
+        `)
+        .in('team_id', teamIds)
+        .order('team_id, slot');
+
+      if (teamMembersError) {
+        console.error('Error fetching team members:', teamMembersError);
+        Alert.alert('Error', 'Failed to load teams');
+        return;
+      }
+
+      // Process team data - group by team and collect all members
+      const teamMap = new Map();
+      
+      allTeamMembers?.forEach((member: any) => {
+        const teamId = member.team_id;
         const team = member.teams;
-        const members = [];
         
-        // Get all members for this team
+        if (!teamMap.has(teamId)) {
+          teamMap.set(teamId, {
+            id: team.id,
+            name: team.name,
+            members: []
+          });
+        }
+        
+        // Add member to the team
         if (member.profiles?.display_name) {
-          members.push(member.profiles.display_name);
+          teamMap.get(teamId).members.push(member.profiles.display_name);
         }
         if (member.team_guests?.display_name) {
-          members.push(member.team_guests.display_name);
+          teamMap.get(teamId).members.push(member.team_guests.display_name + ' (Guest)');
         }
-        
-        return {
-          id: team.id,
-          name: team.name,
-          members: members.join(' · ')
-        };
-      }) || [];
+      });
+
+      const processedTeams: Team[] = Array.from(teamMap.values()).map(team => ({
+        id: team.id,
+        name: team.name,
+        members: team.members.join(' · ')
+      }));
 
       setTeams(processedTeams);
     } catch (error) {
@@ -504,14 +535,13 @@ export default function SpadesScreen() {
             <ThemedText style={styles.emptyText}>No teams yet. Create your first team!</ThemedText>
           ) : (
             teams.map((team) => (
-              <TouchableOpacity 
-                key={team.id} 
-                style={styles.teamCard}
-                onPress={() => router.push({ pathname: '/teams/[teamId]', params: { teamId: team.id } } as any)}
-              >
-                <ThemedText style={styles.teamName}>{team.name}</ThemedText>
-                <ThemedText style={styles.teamMembers}>{team.members}</ThemedText>
-              </TouchableOpacity>
+              <TeamCard
+                key={team.id}
+                teamId={team.id}
+                teamName={team.name}
+                teamMembers={team.members}
+                onPress={(teamId) => router.push({ pathname: '/teams/[teamId]', params: { teamId } } as any)}
+              />
             ))
           )}
         </View>
@@ -672,22 +702,6 @@ const styles = StyleSheet.create({
     color: '#9BA1A6',
     marginBottom: 16,
     textTransform: 'uppercase',
-  },
-  teamCard: {
-    backgroundColor: '#1A1A24',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 12,
-  },
-  teamName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#ECEDEE',
-    marginBottom: 4,
-  },
-  teamMembers: {
-    fontSize: 14,
-    color: '#9BA1A6',
   },
   gameCard: {
     backgroundColor: '#1A1A24',
