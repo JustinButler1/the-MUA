@@ -1,0 +1,99 @@
+---
+alwaysApply: true
+---
+
+# Description
+
+All **functions** and **React components** (functional or class-based) must have a clear documentation comment above them explaining **what they do**, **how they work**, and any important **props, parameters, side effects, or assumptions**.
+
+# Scope
+
+- files: ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
+
+# Rationale
+
+- Enhances readability and maintainability of logic and UI code.
+- Provides Cursor and other AI tools with strong contextual understanding.
+- Reduces confusion and prevents misinterpretation of complex behavior.
+- Ensures all developers follow consistent, self-documenting standards.
+
+# Requirements
+
+For each function or component:
+
+- Include a `/** ... */` doc comment immediately above the definition.
+- Begin with a short, clear summary of **what** it does.
+- Optionally describe **how** it works, or **why** certain choices were made.
+- Document parameters, return types, and props (for components) using `@param`, `@returns`, and `@prop`.
+- For React components, describe the **purpose**, **key props**, and **rendered result**.
+
+# Examples
+
+## ✅ Example 1: Regular function
+
+```ts
+/**
+ * Filters an array of users based on a search term and active status.
+ * Uses case-insensitive matching.
+ *
+ * @param users - List of user objects.
+ * @param search - Search string entered by the user.
+ * @returns Filtered array of users matching the criteria.
+ */
+export function filterUsers(users: User[], search: string): User[] {
+  return users.filter(
+    (u) => u.active && u.name?.toLowerCase().includes(search.toLowerCase())
+  );
+}
+```
+
+Example 2: React functional component
+
+```ts
+/**
+ * Displays a user's profile card with their avatar, name, and status.
+ *
+ * @prop user - The user object containing name, avatar, and status.
+ * @returns A styled card element representing the user.
+ *
+ * @example
+ * <UserCard user={currentUser} />
+ */
+export function UserCard({ user }: { user: User }) {
+  return (
+    <div className="user-card">
+      <img src={user.avatar} alt={user.name} />
+      <div>{user.name}</div>
+      <span>{user.active ? "Active" : "Offline"}</span>
+    </div>
+  );
+}
+```
+
+Example 3: React class component
+
+```ts
+/**
+ * A class-based counter component with increment and decrement buttons.
+ *
+ * @prop initial - Starting count value.
+ * @returns Renders a counter UI with buttons to adjust the value.
+ */
+export class Counter extends React.Component<{ initial: number }> {
+  state = { count: this.props.initial };
+
+  render() {
+    return (
+      <div>
+        <p>Count: {this.state.count}</p>
+        <button onClick={() => this.setState({ count: this.state.count + 1 })}>
+          +
+        </button>
+        <button onClick={() => this.setState({ count: this.state.count - 1 })}>
+          -
+        </button>
+      </div>
+    );
+  }
+}
+```

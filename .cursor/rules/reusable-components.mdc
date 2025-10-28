@@ -1,0 +1,161 @@
+---
+alwaysApply: true
+---
+
+# Description
+
+When working on React JSX/TSX files, if a UI subsection is **complex**, **reused/mapped**, or is **longer than ~5–10 lines** inline, **extract it into a named component** and **place it in a `components/` directory (or feature-local `*/components/`)**. Then import and use it.
+
+# Scope
+
+- files: ["**/*.tsx", "**/*.jsx"]
+
+# Rationale
+
+- Improves readability and reuse.
+- Keeps files small and intent-focused.
+- Makes testing and styling more targeted.
+
+# Heuristics (what to look for)
+
+- A `.map(...)` that returns JSX.
+- Repeated JSX blocks (≥2 occurrences with minor variation).
+- Conditional branches with multi-line JSX (`?:`, `&&`, `if` blocks).
+- Sections exceeding ~5–10 JSX lines or requiring their own props.
+- Blocks that would benefit from a name (e.g., `UserCard`, `EmptyState`).
+
+# Actions (what to do)
+
+1. Identify the subsection; choose a good component name.
+2. Hoist it to `components/` (global) or `{feature}/components/` (local) with its own file.
+3. Define explicit `props` (TypeScript types if available) and keep side effects out.
+4. Replace inline JSX with the new component usage.
+5. If it was inside a `.map`, move only the rendered item block; keep data logic at the callsite.
+6. Add minimal snapshot/unit test if applicable.
+
+# Constraints
+
+- Do NOT extract trivial 1–3 line spans unless reused or logically distinct.
+- Keep components pure; avoid capturing outer mutable state unless passed via props.
+- Preserve behavior, styles, accessibility attributes, and test ids.
+
+# Examples
+
+## Before (inline map)
+
+````tsx
+<ul>
+  {users.map(u => (
+    <li key={u.id}>
+      <img src={u.avatar} alt={u.name} />
+      <div className="meta">
+        <span>{u.name}</span>
+        <span>{u.role}</span>
+      </div>
+      {u.active ? <span>Active</span> : <span>Inactive</span>}
+    </li>
+  ))}
+</ul>
+# Description
+When working on React JSX/TSX files, if a UI subsection is **complex**, **reused/mapped**, or is **longer than ~5–10 lines** inline, **extract it into a named component** and **place it in a `components/` directory (or feature-local `*/components/`)**. Then import and use it.
+
+# Scope
+- files: ["**/*.tsx", "**/*.jsx"]
+
+# Rationale
+- Improves readability and reuse.
+- Keeps files small and intent-focused.
+- Makes testing and styling more targeted.
+
+# Heuristics (what to look for)
+- A `.map(...)` that returns JSX.
+- Repeated JSX blocks (≥2 occurrences with minor variation).
+- Conditional branches with multi-line JSX (`?:`, `&&`, `if` blocks).
+- Sections exceeding ~5–10 JSX lines or requiring their own props.
+- Blocks that would benefit from a name (e.g., `UserCard`, `EmptyState`).
+
+# Actions (what to do)
+1. Identify the subsection; choose a good component name.
+2. Hoist it to `components/` (global) or `{feature}/components/` (local) with its own file.
+3. Define explicit `props` (TypeScript types if available) and keep side effects out.
+4. Replace inline JSX with the new component usage.
+5. If it was inside a `.map`, move only the rendered item block; keep data logic at the callsite.
+6. Add minimal snapshot/unit test if applicable.
+
+# Constraints
+- Do NOT extract trivial 1–3 line spans unless reused or logically distinct.
+- Keep components pure; avoid capturing outer mutable state unless passed via props.
+- Preserve behavior, styles, accessibility attributes, and test ids.
+
+# Examples
+
+## Before (inline map)
+```tsx
+<ul>
+  {users.map(u => (
+    <li key={u.id}>
+      <img src={u.avatar} alt={u.name} />
+      <div className="meta">
+        <span>{u.name}</span>
+        <span>{u.role}</span>
+      </div>
+      {u.active ? <span>Active</span> : <span>Inactive</span>}
+    </li>
+  ))}
+</ul>
+````
+
+## After
+
+```tsx
+import { UserItem } from "@/components/UserItem";
+
+<ul>
+  {users.map((u) => (
+    <UserItem key={u.id} user={u} />
+  ))}
+</ul>;
+```
+
+```tsx
+// /components/UserItem.tsx
+export function UserItem({ user }: { user: User }) {
+  return (
+    <li>
+      <img src={user.avatar} alt={user.name} />
+      <div className="meta">
+        <span>{user.name}</span>
+        <span>{user.role}</span>
+      </div>
+      <span>{user.active ? "Active" : "Inactive"}</span>
+    </li>
+  );
+}
+```
+
+## Before
+
+```tsx
+{
+  isLoading ? (
+    <div className="empty">
+      <Spinner /> Loading...
+    </div>
+  ) : error ? (
+    <div className="empty error">
+      <Warning /> Failed to load
+    </div>
+  ) : (
+    <div className="grid">{children}</div>
+  );
+}
+```
+
+## After
+
+```tsx
+import { ContentState } from "@/components/ContentState";
+<ContentState isLoading={isLoading} error={error}>
+  <div className="grid">{children}</div>
+</ContentState>;
+```
