@@ -5,7 +5,11 @@ import 'react-native-reanimated';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
-export default function TeamsLayout() {
+/**
+ * Defines the navigation stack for the Groups feature.
+ * Registers the index (list) and create screens and applies theme based on color scheme.
+ */
+export default function GroupsLayout() {
   const colorScheme = useColorScheme();
 
   return (
@@ -14,27 +18,18 @@ export default function TeamsLayout() {
         <Stack.Screen 
           name="index" 
           options={{ 
-            title: 'Teams',
+            title: 'Groups',
             headerShown: false,
           }} 
         />
         <Stack.Screen 
-          name="create" 
-          options={{ 
-            title: 'Create Team',
-            presentation: 'card',
-          }} 
-        />
-        <Stack.Screen 
-          name="[teamId]" 
-          options={{ 
-            title: 'Team Details',
-            presentation: 'card',
-          }} 
+          name="create"
+          options={{
+            title: 'Create Group',
+          }}
         />
       </Stack>
       <StatusBar style="auto" />
     </ThemeProvider>
   );
 }
-

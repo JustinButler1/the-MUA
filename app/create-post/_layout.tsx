@@ -5,7 +5,7 @@ import 'react-native-reanimated';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
-export default function TeamsLayout() {
+export default function CreatePostLayout() {
   const colorScheme = useColorScheme();
 
   return (
@@ -14,22 +14,8 @@ export default function TeamsLayout() {
         <Stack.Screen 
           name="index" 
           options={{ 
-            title: 'Teams',
+            title: 'Create Post',
             headerShown: false,
-          }} 
-        />
-        <Stack.Screen 
-          name="create" 
-          options={{ 
-            title: 'Create Team',
-            presentation: 'card',
-          }} 
-        />
-        <Stack.Screen 
-          name="[teamId]" 
-          options={{ 
-            title: 'Team Details',
-            presentation: 'card',
           }} 
         />
       </Stack>
@@ -37,4 +23,3 @@ export default function TeamsLayout() {
     </ThemeProvider>
   );
 }
-

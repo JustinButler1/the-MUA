@@ -32,6 +32,8 @@ function RootLayoutNav() {
           <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
           <Stack.Screen name="games" options={{ headerShown: false }} />
           <Stack.Screen name="teams" options={{ headerShown: false }} />
+          <Stack.Screen name="groups" options={{ headerShown: false }} />
+          <Stack.Screen name="create-post" options={{ headerShown: false }} />
         </Stack.Protected>
       </Stack>
       <StatusBar style="auto" />
