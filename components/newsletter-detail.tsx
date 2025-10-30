@@ -118,11 +118,14 @@ export function NewsletterDetail({
           </View>
         </View>
 
-        {/* Newsletter Content */}
+        {/* Newsletter Content */
+        }
         <View style={styles.content}>
-          <ThemedText style={[styles.headline, { color: colors.text }]}>
-            {post.headline}
-          </ThemedText>
+          {post.headline && (
+            <ThemedText style={[styles.headline, { color: colors.text }]}>
+              {post.headline}
+            </ThemedText>
+          )}
           
           <ThemedText style={[styles.subtext, { color: colors.text, opacity: 0.8 }]}>
             {post.subtext}

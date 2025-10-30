@@ -27,6 +27,8 @@ export interface BasePost {
  */
 export interface AnnouncementPost extends BasePost {
   type: 'announcement';
+  /** Optional headline to draw attention to the announcement */
+  headline?: string;
   content: string;
 }
 
@@ -43,6 +45,8 @@ export interface TextOnlyPost extends BasePost {
  */
 export interface EventPost extends BasePost {
   type: 'event';
+  /** Optional headline for the event card */
+  headline?: string;
   content: string;
   imageUrl?: string;
 }
@@ -52,7 +56,8 @@ export interface EventPost extends BasePost {
  */
 export interface NewsletterPost extends BasePost {
   type: 'newsletter';
-  headline: string;
+  /** Optional headline; when omitted, callers should fall back to group/title context */
+  headline?: string;
   subtext: string;
   content?: string; // Optional preview content
   imageUrl?: string; // Optional preview image

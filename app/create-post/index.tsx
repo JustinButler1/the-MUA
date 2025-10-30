@@ -62,6 +62,23 @@ export default function CreatePostScreen() {
   ];
 
   /**
+   * Determines if a given post type is allowed for the currently selected author.
+   * Profiles may only create text-only posts. Groups may create any post type.
+   *
+   * @param type - The candidate post type to evaluate.
+   * @param author - The selected post author (profile or group).
+   * @returns True if the post type can be selected for the given author.
+   */
+  const isPostTypeAllowedForAuthor = (
+    type: PostType,
+    author: { type: 'profile' | 'group'; id: string; name: string } | null
+  ): boolean => {
+    if (!author) return false;
+    if (author.type === 'group') return true;
+    return type === 'text-only';
+  };
+
+  /**
    * Available aspect ratios for image preview (letterboxed) selection.
    * 1.91:1 is typical for link previews, 4:5 is portrait-friendly, and 1:1 is square.
    */
@@ -167,6 +184,10 @@ export default function CreatePostScreen() {
   const handleAuthorChange = (author: { type: 'profile' | 'group'; id: string; name: string }) => {
     console.log('Post author changed to:', author.type, author.name);
     setSelectedAuthor(author);
+    // Ensure post type remains valid when switching authors
+    if (author.type === 'profile' && postType !== 'text-only') {
+      setPostType('text-only');
+    }
     setShowAuthorDropdown(false);
   };
 
@@ -178,10 +199,18 @@ export default function CreatePostScreen() {
     console.log('=== Create Post Form Submission ===');
     console.log('Post Type:', postType, `(${getPostTypeLabel(postType)})`);
     console.log('Content:', content);
+
+    // Guard: Profiles can only submit text-only posts
+    if (!isPostTypeAllowedForAuthor(postType, selectedAuthor)) {
+      console.warn('Selected post type is not allowed for this author.');
+      return;
+    }
     
-    if (postType === 'newsletter') {
+    if (postType === 'announcement' || postType === 'event' || postType === 'newsletter') {
       console.log('Headline:', headline);
-      console.log('Subtext:', subtext);
+      if (postType === 'newsletter') {
+        console.log('Subtext:', subtext);
+      }
     }
     
     if ((postType === 'event' || postType === 'newsletter') && pickedImageUri) {
@@ -341,11 +370,9 @@ export default function CreatePostScreen() {
 
         {/* Content Fields */}
         <View style={styles.section}>
-          {postType === 'newsletter' ? (
+          {postType === 'announcement' || postType === 'event' || postType === 'newsletter' ? (
             <>
-              <ThemedText style={[styles.sectionLabel, { color: colors.text }]}>
-                Headline
-              </ThemedText>
+              <ThemedText style={[styles.sectionLabel, { color: colors.text }]}>Headline (optional)</ThemedText>
               <TextInput
                 style={[styles.textInput, { backgroundColor: colors.background + 'CC', color: colors.text }]}
                 value={headline}
@@ -357,27 +384,43 @@ export default function CreatePostScreen() {
                 placeholderTextColor={colors.text + '80'}
                 multiline
               />
-              
+
+              {postType === 'newsletter' && (
+                <>
+                  <ThemedText style={[styles.sectionLabel, { color: colors.text, marginTop: 16 }]}>Subtext</ThemedText>
+                  <TextInput
+                    style={[styles.textInput, { backgroundColor: colors.background + 'CC', color: colors.text }]}
+                    value={subtext}
+                    onChangeText={(text) => {
+                      console.log('Subtext changed:', text);
+                      setSubtext(text);
+                    }}
+                    placeholder="Enter subtext"
+                    placeholderTextColor={colors.text + '80'}
+                    multiline
+                  />
+                </>
+              )}
+
               <ThemedText style={[styles.sectionLabel, { color: colors.text, marginTop: 16 }]}>
-                Subtext
+                {postType === 'newsletter' ? 'Content (optional preview)' : 'Content'}
               </ThemedText>
               <TextInput
-                style={[styles.textInput, { backgroundColor: colors.background + 'CC', color: colors.text }]}
-                value={subtext}
+                style={[styles.textInput, styles.textArea, { backgroundColor: colors.background + 'CC', color: colors.text }]}
+                value={content}
                 onChangeText={(text) => {
-                  console.log('Subtext changed:', text);
-                  setSubtext(text);
+                  console.log('Content changed:', text);
+                  setContent(text);
                 }}
-                placeholder="Enter subtext"
+                placeholder={postType === 'newsletter' ? 'Optional preview content' : "What's going on?"}
                 placeholderTextColor={colors.text + '80'}
                 multiline
+                numberOfLines={6}
               />
             </>
           ) : (
             <>
-              <ThemedText style={[styles.sectionLabel, { color: colors.text }]}>
-                Content
-              </ThemedText>
+              <ThemedText style={[styles.sectionLabel, { color: colors.text }]}>Content</ThemedText>
               <TextInput
                 style={[styles.textInput, styles.textArea, { backgroundColor: colors.background + 'CC', color: colors.text }]}
                 value={content}
@@ -572,28 +615,35 @@ export default function CreatePostScreen() {
             </View>
             
             <ScrollView style={styles.dropdownList}>
-              {postTypeOptions.map((option) => (
-                <TouchableOpacity
-                  key={option.value}
-                  style={[
-                    styles.dropdownOption,
-                    postType === option.value && { backgroundColor: colors.tint + '20' }
-                  ]}
-                  onPress={() => handlePostTypeChange(option.value)}
-                >
-                  <ThemedText style={[
-                    styles.dropdownOptionText,
-                    { color: postType === option.value ? colors.tint : colors.text }
-                  ]}>
-                    {option.label}
-                  </ThemedText>
-                  {postType === option.value && (
-                    <ThemedText style={[styles.dropdownOptionCheck, { color: colors.tint }]}>
-                      ✓
+              {postTypeOptions.map((option) => {
+                const allowed = isPostTypeAllowedForAuthor(option.value, selectedAuthor);
+                const isSelected = postType === option.value;
+                return (
+                  <TouchableOpacity
+                    key={option.value}
+                    style={[
+                      styles.dropdownOption,
+                      isSelected && { backgroundColor: colors.tint + '20' },
+                      !allowed && { opacity: 0.5 },
+                    ]}
+                    disabled={!allowed}
+                    onPress={() => allowed && handlePostTypeChange(option.value)}
+                  >
+                    <ThemedText style={[
+                      styles.dropdownOptionText,
+                      { color: isSelected ? colors.tint : colors.text }
+                    ]}>
+                      {option.label}
+                      {!allowed ? ' (Groups Only)' : ''}
                     </ThemedText>
-                  )}
-                </TouchableOpacity>
-              ))}
+                    {isSelected && (
+                      <ThemedText style={[styles.dropdownOptionCheck, { color: colors.tint }]}>
+                        ✓
+                      </ThemedText>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
             </ScrollView>
           </View>
         </TouchableOpacity>

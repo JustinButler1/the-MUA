@@ -4,9 +4,10 @@ import { Colors } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
+import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
 import React, { useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, ScrollView, StatusBar, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, ScrollView, StatusBar, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 
 /**
  * Presents a form to create a new group in the system.
@@ -27,6 +28,8 @@ export default function CreateGroupScreen() {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [profileImageUri, setProfileImageUri] = useState<string | null>(null);
+  const [bannerImageUri, setBannerImageUri] = useState<string | null>(null);
 
   const slug = useMemo(() =>
     name
@@ -40,6 +43,74 @@ export default function CreateGroupScreen() {
 
   const handleCancel = () => {
     router.back();
+  };
+
+  /**
+   * Opens the device image library to pick a single image and stores the URI in the provided setter.
+   * Uses expo-image-picker; the selected URI will be used later for upload after the group is created.
+   *
+   * @param setUri - React state setter for the chosen image URI
+   */
+  const handlePickImage = async (setUri: (uri: string | null) => void) => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission required', 'Allow photo library access to pick an image.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: false,
+        quality: 0.9,
+        selectionLimit: 1,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        setUri(result.assets[0].uri);
+      }
+    } catch (e) {
+      console.error('pick image error', e);
+      Alert.alert('Image picker error', 'Could not open image library.');
+    }
+  };
+
+  /**
+   * Uploads a local image URI to Supabase Storage and returns a public URL.
+   * Saves under the 'media' bucket at groups/{groupId}/{kind}-{timestamp}.jpg.
+   *
+   * @param groupId - Group owner id to build the storage path
+   * @param localUri - Local file URI (from ImagePicker)
+   * @param kind - 'profile' | 'banner' used in filename
+   * @returns Publicly accessible URL string
+   */
+  const uploadGroupImageAndGetUrl = async (groupId: string, localUri: string, kind: 'profile' | 'banner'): Promise<string | null> => {
+    try {
+      const response = await fetch(localUri);
+      const blob = await response.blob();
+      const arrayBuffer = await blob.arrayBuffer();
+
+      const ext = blob.type === 'image/png' ? 'png' : 'jpg';
+      const path = `groups/${groupId}/${kind}-${Date.now()}.${ext}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('media')
+        .upload(path, arrayBuffer, {
+          contentType: blob.type || 'image/jpeg',
+          upsert: true,
+        });
+
+      if (uploadError) {
+        console.error('storage upload error', uploadError);
+        return null;
+      }
+
+      const { data: publicData } = supabase.storage.from('media').getPublicUrl(path);
+      return publicData?.publicUrl ?? null;
+    } catch (e) {
+      console.error('upload image error', e);
+      return null;
+    }
   };
 
   const handleCreate = async () => {
@@ -84,6 +155,53 @@ export default function CreateGroupScreen() {
       if (!group?.id) {
         Alert.alert('Create failed', 'Unexpected error creating the group.');
         return;
+      }
+
+      // 1b) If images were chosen, upload and create media_asset rows
+      try {
+        const inserts: Array<Promise<any>> = [];
+        if (profileImageUri) {
+          inserts.push((async () => {
+            const url = await uploadGroupImageAndGetUrl(group.id, profileImageUri, 'profile');
+            if (url) {
+              const { error } = await supabase
+                .from('media_asset')
+                .insert({
+                  owner_type: 'group',
+                  owner_id: group.id,
+                  url,
+                  mime: 'image/jpeg',
+                  is_primary: true,
+                  sort_order: 0,
+                  meta: { kind: 'profile' },
+                });
+              if (error) console.error('media_asset insert (profile) error', error);
+            }
+          })());
+        }
+        if (bannerImageUri) {
+          inserts.push((async () => {
+            const url = await uploadGroupImageAndGetUrl(group.id, bannerImageUri, 'banner');
+            if (url) {
+              const { error } = await supabase
+                .from('media_asset')
+                .insert({
+                  owner_type: 'group',
+                  owner_id: group.id,
+                  url,
+                  mime: 'image/jpeg',
+                  is_primary: false,
+                  sort_order: 1,
+                  meta: { kind: 'banner' },
+                });
+              if (error) console.error('media_asset insert (banner) error', error);
+            }
+          })());
+        }
+        if (inserts.length) await Promise.all(inserts);
+      } catch (mediaErr) {
+        console.error('media upload error', mediaErr);
+        // Non-blocking; continue
       }
 
       // 2) Add creator as owner
@@ -141,6 +259,71 @@ export default function CreateGroupScreen() {
           />
           {!!slug && (
             <ThemedText style={[styles.hint, { color: colors.text, opacity: 0.6 }]}>Slug: {slug}</ThemedText>
+          )}
+        </View>
+
+        {/* Optional Images */}
+        <View style={styles.section}>
+          <ThemedText style={[styles.label, { color: colors.text }]}>Group Picture (optional)</ThemedText>
+          {profileImageUri ? (
+            <View style={{ gap: 10 }}>
+              <View style={styles.imagePreviewSquare}>
+                <Image source={{ uri: profileImageUri }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+              </View>
+              <View style={{ flexDirection: 'row', gap: 12 }}>
+                <TouchableOpacity
+                  style={[styles.secondaryButton, { backgroundColor: '#1A1A24' }]}
+                  onPress={() => handlePickImage(setProfileImageUri)}
+                >
+                  <ThemedText style={[styles.secondaryButtonText]}>Change</ThemedText>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.secondaryButton, { backgroundColor: '#1A1A24' }]}
+                  onPress={() => setProfileImageUri(null)}
+                >
+                  <ThemedText style={[styles.secondaryButtonText]}>Remove</ThemedText>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={[styles.pickButton, { backgroundColor: '#1A1A24' }]}
+              onPress={() => handlePickImage(setProfileImageUri)}
+            >
+              <ThemedText style={styles.pickButtonText}>Pick a profile image</ThemedText>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        <View style={styles.section}>
+          <ThemedText style={[styles.label, { color: colors.text }]}>Banner (optional)</ThemedText>
+          {bannerImageUri ? (
+            <View style={{ gap: 10 }}>
+              <View style={styles.imagePreviewBanner}>
+                <Image source={{ uri: bannerImageUri }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+              </View>
+              <View style={{ flexDirection: 'row', gap: 12 }}>
+                <TouchableOpacity
+                  style={[styles.secondaryButton, { backgroundColor: '#1A1A24' }]}
+                  onPress={() => handlePickImage(setBannerImageUri)}
+                >
+                  <ThemedText style={[styles.secondaryButtonText]}>Change</ThemedText>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.secondaryButton, { backgroundColor: '#1A1A24' }]}
+                  onPress={() => setBannerImageUri(null)}
+                >
+                  <ThemedText style={[styles.secondaryButtonText]}>Remove</ThemedText>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={[styles.pickButton, { backgroundColor: '#1A1A24' }]}
+              onPress={() => handlePickImage(setBannerImageUri)}
+            >
+              <ThemedText style={styles.pickButtonText}>Pick a banner image</ThemedText>
+            </TouchableOpacity>
           )}
         </View>
 
@@ -217,6 +400,43 @@ const styles = StyleSheet.create({
   hint: {
     fontSize: 12,
     marginTop: 8,
+  },
+  pickButton: {
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  pickButtonText: {
+    color: '#ECEDEE',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  secondaryButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  secondaryButtonText: {
+    color: '#ECEDEE',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  imagePreviewSquare: {
+    width: '100%',
+    aspectRatio: 1,
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: '#000',
+  },
+  imagePreviewBanner: {
+    width: '100%',
+    aspectRatio: 3,
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: '#000',
   },
   actions: {
     flexDirection: 'row',

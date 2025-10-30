@@ -125,15 +125,19 @@ export default function HomeScreen() {
                   Loading posts...
                 </ThemedText>
               </View>
-              
-              {/* Create Post Button */}
-              <TouchableOpacity
-                style={[styles.createButton, { backgroundColor: colors.tint }]}
-                onPress={() => router.push('/create-post')}
-                activeOpacity={0.7}
-              >
-                <IconSymbol name="plus" size={24} color={colors.background} />
-              </TouchableOpacity>
+              <>
+                {/* Groups Button */}
+                <GroupsButton />
+                
+                {/* Create Post Button */}
+                <TouchableOpacity
+                  style={[styles.createButton, { backgroundColor: colors.tint }]}
+                  onPress={() => router.push('/create-post')}
+                  activeOpacity={0.7}
+                >
+                  <IconSymbol name="plus" size={24} color={colors.text} />
+                </TouchableOpacity>
+              </>
             </View>
             
             {/* Filter Selection */}
@@ -141,9 +145,6 @@ export default function HomeScreen() {
               selectedFilter={selectedFilter}
               onFilterChange={handleFilterChange}
             />
-            
-            {/* Groups Button */}
-            <GroupsButton />
           </View>
           
           <View style={styles.loadingContainer}>
@@ -172,15 +173,19 @@ export default function HomeScreen() {
                   Error loading posts
                 </ThemedText>
               </View>
-              
-              {/* Create Post Button */}
-              <TouchableOpacity
-                style={[styles.createButton, { backgroundColor: colors.tint }]}
-                onPress={() => router.push('/create-post')}
-                activeOpacity={0.7}
-              >
-                <IconSymbol name="plus" size={24} color={colors.background} />
-              </TouchableOpacity>
+              <>
+                {/* Groups Button */}
+                <GroupsButton />
+                
+                {/* Create Post Button */}
+                <TouchableOpacity
+                  style={[styles.createButton, { backgroundColor: colors.tint }]}
+                  onPress={() => router.push('/create-post')}
+                  activeOpacity={0.7}
+                >
+                  <IconSymbol name="plus" size={24} color={colors.text} />
+                </TouchableOpacity>
+              </>
             </View>
             
             {/* Filter Selection */}
@@ -188,9 +193,6 @@ export default function HomeScreen() {
               selectedFilter={selectedFilter}
               onFilterChange={handleFilterChange}
             />
-            
-            {/* Groups Button */}
-            <GroupsButton />
           </View>
           
           <View style={styles.errorContainer}>
@@ -219,15 +221,19 @@ export default function HomeScreen() {
                   No posts from your groups
                 </ThemedText>
               </View>
-              
-              {/* Create Post Button */}
-              <TouchableOpacity
-                style={[styles.createButton, { backgroundColor: colors.tint }]}
-                onPress={() => router.push('/create-post')}
-                activeOpacity={0.7}
-              >
-                <IconSymbol name="plus" size={24} color={colors.background} />
-              </TouchableOpacity>
+              <>
+                {/* Groups Button */}
+                <GroupsButton />
+
+                {/* Create Post Button */}
+                <TouchableOpacity
+                  style={[styles.createButton, { backgroundColor: colors.tint }]}
+                  onPress={() => router.push('/create-post')}
+                  activeOpacity={0.7}
+                >
+                  <IconSymbol name="plus" size={24} color={colors.text} />
+                </TouchableOpacity>
+              </>
             </View>
             
             {/* Filter Selection */}
@@ -235,9 +241,6 @@ export default function HomeScreen() {
               selectedFilter={selectedFilter}
               onFilterChange={handleFilterChange}
             />
-            
-            {/* Groups Button */}
-            <GroupsButton />
           </View>
           
           <EmptyFeed />
@@ -261,14 +264,19 @@ export default function HomeScreen() {
             </ThemedText>
           </View>
           
-          {/* Create Post Button */}
-          <TouchableOpacity
-            style={[styles.createButton, { backgroundColor: colors.tint }]}
-            onPress={() => router.push('/create-post')}
-            activeOpacity={0.7}
-          >
-            <IconSymbol name="plus" size={24} color={colors.background} />
-          </TouchableOpacity>
+          <>
+            {/* Groups Button */}
+            <GroupsButton />
+            
+            {/* Create Post Button */}
+            <TouchableOpacity
+              style={[styles.createButton, { backgroundColor: colors.tint }]}
+              onPress={() => router.push('/create-post')}
+              activeOpacity={0.7}
+            >
+              <IconSymbol name="plus" size={24} color={colors.text} />
+            </TouchableOpacity>
+          </>
         </View>
         
         {/* Filter Selection */}
@@ -276,9 +284,6 @@ export default function HomeScreen() {
           selectedFilter={selectedFilter}
           onFilterChange={handleFilterChange}
         />
-        
-        {/* Groups Button */}
-        <GroupsButton />
       </View>
 
       {/* Posts List */}

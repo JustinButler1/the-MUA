@@ -1,4 +1,3 @@
-import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -20,44 +19,22 @@ export function GroupsButton() {
 
   return (
     <TouchableOpacity
-      style={[
-        styles.button,
-        {
-          backgroundColor: colors.tint,
-          borderColor: colors.tint,
-        }
-      ]}
+      style={[styles.button, { backgroundColor: colors.tint }]}
       onPress={handlePress}
-      activeOpacity={0.8}
+      activeOpacity={0.7}
     >
-      <IconSymbol
-        name="person.3.fill"
-        size={20}
-        color="#FFFFFF"
-      />
-      <ThemedText style={styles.buttonText}>
-        Groups
-      </ThemedText>
+      <IconSymbol name="person.3.fill" size={24} color={colors.text} />
     </TouchableOpacity>
   );
 }
 
 const styles = StyleSheet.create({
   button: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     justifyContent: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    gap: 8,
-    marginHorizontal: 16,
-    marginVertical: 8,
-  },
-  buttonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FFFFFF',
+    alignItems: 'center',
+    marginLeft: 12,
   },
 });

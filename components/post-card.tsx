@@ -80,7 +80,7 @@ export function PostCard({ post, onPress, onLike, onComment }: PostCardProps) {
                 style={{ opacity: 0.6 }}
               />
               <ThemedText style={[styles.groupName, { color: colors.text, opacity: 0.7 }]}>
-                {post.group.name} Tets
+                {post.group.name}
               </ThemedText>
               <ThemedText style={[styles.timeAgo, { color: colors.text, opacity: 0.5 }]}>
                 • {formatTimeAgo(post.createdAt)}
@@ -100,7 +100,13 @@ export function PostCard({ post, onPress, onLike, onComment }: PostCardProps) {
 
         {isAnnouncementPost(post) && (
           <>
-            <ThemedText style={[styles.newsletterHeadline, { color: colors.text }]}>Announcement Post</ThemedText>
+            {post.headline ? (
+              <ThemedText style={[styles.newsletterHeadline, { color: colors.text }]}>
+                {post.headline}
+              </ThemedText>
+            ) : (
+              <ThemedText style={[styles.newsletterHeadline, { color: colors.text }]}>Announcement</ThemedText>
+            )}
             <ThemedText style={[styles.postText, { color: colors.text }]}>
               {post.content}
             </ThemedText>
@@ -109,7 +115,13 @@ export function PostCard({ post, onPress, onLike, onComment }: PostCardProps) {
 
         {isEventPost(post) && (
           <>
-            <ThemedText style={[styles.newsletterHeadline, { color: colors.text }]}>Event Post</ThemedText>
+            {post.headline ? (
+              <ThemedText style={[styles.newsletterHeadline, { color: colors.text }]}>
+                {post.headline}
+              </ThemedText>
+            ) : (
+              <ThemedText style={[styles.newsletterHeadline, { color: colors.text }]}>Event</ThemedText>
+            )}
             <ThemedText style={[styles.postText, { color: colors.text }]}>
               {post.content}
             </ThemedText>
@@ -128,9 +140,11 @@ export function PostCard({ post, onPress, onLike, onComment }: PostCardProps) {
         {isNewsletterPost(post) && (
           <>
             <ThemedText style={[styles.newsletterHeadline, { color: colors.text }]}>News Post</ThemedText>
-            <ThemedText style={[styles.newsletterHeadline, { color: colors.text }]}>
-              {post.headline}
-            </ThemedText>
+            {post.headline && (
+              <ThemedText style={[styles.newsletterHeadline, { color: colors.text }]}>
+                {post.headline}
+              </ThemedText>
+            )}
             <ThemedText style={[styles.newsletterSubtext, { color: colors.text, opacity: 0.8 }]}>
               {post.subtext}
             </ThemedText>
